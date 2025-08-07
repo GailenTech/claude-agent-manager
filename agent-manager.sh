@@ -35,9 +35,10 @@ PROJECT_AGENTS=""
 PROJECT_ROOT=""
 
 # State
-current_mode="view"  # view, edit_user, edit_project, install
+current_mode="view"  # view, edit_user, edit_project, install, sync
 current_index=0
 current_level=""
+sync_direction=""  # for sync mode: user_to_project, project_to_user, bidirectional
 declare -a all_agents=()
 declare -a agent_names=()
 declare -a agent_descriptions=()
@@ -183,6 +184,9 @@ draw_interface() {
             ;;
         "install")
             echo -e "${BOLD}${BLUE}║                       Instalar Nuevos Agentes                                     ║${NC}"
+            ;;
+        "sync")
+            echo -e "${BOLD}${BLUE}║                      Sincronizar Agentes 🔄                                      ║${NC}"
             ;;
     esac
     
@@ -389,6 +393,9 @@ draw_instructions() {
         "install")
             echo -e "${DIM}[↑/↓] Navegar  [ESPACIO] Seleccionar  [a] Todos  [n] Ninguno  [1] →Usuario  [2] →Proyecto  [ESC] Volver${NC}"
             ;;
+        "sync")
+            echo -e "${DIM}[1] 📁→🌍 Proyecto a Usuario  [2] 🌍→📁 Usuario a Proyecto  [3] 🔄 Bidireccional  [ESC] Volver${NC}"
+            ;;
     esac
 }
 
@@ -535,67 +542,88 @@ install_selected() {
     sleep 2
 }
 
-# Sync agents between levels
-sync_agents() {
+# Execute sync operation
+execute_sync() {
+    local direction=$1
     clear_screen
-    echo -e "${BOLD}${BLUE}Sincronización de Agentes${NC}\n"
+    echo -e "${BOLD}${BLUE}Sincronizando Agentes...${NC}\n"
     
-    echo -e "  ${BOLD}1.${NC} 📁→🌍 Proyecto a Usuario"
-    echo -e "  ${BOLD}2.${NC} 🌍→📁 Usuario a Proyecto"
-    echo -e "  ${BOLD}3.${NC} 🔄 Bidireccional"
-    echo -e "  ${BOLD}4.${NC} Cancelar\n"
-    
-    echo -ne "Selección: "
-    read -n1 choice
-    echo
-    
-    case "$choice" in
-        '1')
+    case "$direction" in
+        'project_to_user')
             # Project to User
             if [[ -d "$PROJECT_AGENTS" ]]; then
                 mkdir -p "$USER_AGENTS"
+                local count=0
                 for file in "$PROJECT_AGENTS"/*.md; do
                     if [[ -f "$file" ]]; then
                         cp "$file" "$USER_AGENTS/"
-                        echo -e "${GREEN}✓${NC} Copiado a usuario: $(basename "$file" .md)"
+                        echo -e "${GREEN}✓${NC} 📁→🌍 Copiado a usuario: $(basename "$file" .md)"
+                        ((count++))
                     fi
                 done
+                echo -e "\n${GREEN}$count agentes copiados de proyecto a usuario${NC}"
+            else
+                echo -e "${YELLOW}No hay agentes en el proyecto${NC}"
             fi
             ;;
-        '2')
+        'user_to_project')
             # User to Project
             if [[ -d "$USER_AGENTS" ]] && [[ -n "$PROJECT_ROOT" ]]; then
                 mkdir -p "$PROJECT_AGENTS"
+                local count=0
                 for file in "$USER_AGENTS"/*.md; do
                     if [[ -f "$file" ]]; then
                         cp "$file" "$PROJECT_AGENTS/"
-                        echo -e "${GREEN}✓${NC} Copiado a proyecto: $(basename "$file" .md)"
+                        echo -e "${GREEN}✓${NC} 🌍→📁 Copiado a proyecto: $(basename "$file" .md)"
+                        ((count++))
                     fi
                 done
+                echo -e "\n${GREEN}$count agentes copiados de usuario a proyecto${NC}"
+            else
+                echo -e "${YELLOW}No hay agentes de usuario o no hay proyecto${NC}"
             fi
             ;;
-        '3')
+        'bidirectional')
             # Bidirectional
             if [[ -d "$USER_AGENTS" ]] && [[ -d "$PROJECT_AGENTS" ]]; then
+                local count_up=0
+                local count_pu=0
                 # User to Project
                 for file in "$USER_AGENTS"/*.md; do
                     if [[ -f "$file" ]]; then
                         cp "$file" "$PROJECT_AGENTS/"
-                        echo -e "${GREEN}✓${NC} →📁 $(basename "$file" .md)"
+                        echo -e "${GREEN}✓${NC} 🌍→📁 $(basename "$file" .md)"
+                        ((count_up++))
                     fi
                 done
                 # Project to User
                 for file in "$PROJECT_AGENTS"/*.md; do
                     if [[ -f "$file" ]]; then
                         cp "$file" "$USER_AGENTS/"
-                        echo -e "${GREEN}✓${NC} →🌍 $(basename "$file" .md)"
+                        echo -e "${GREEN}✓${NC} 📁→🌍 $(basename "$file" .md)"
+                        ((count_pu++))
                     fi
                 done
+                echo -e "\n${GREEN}Sincronización completa:${NC}"
+                echo -e "  • $count_up agentes: usuario → proyecto"
+                echo -e "  • $count_pu agentes: proyecto → usuario"
+            else
+                echo -e "${YELLOW}Faltan directorios para sincronización bidireccional${NC}"
             fi
             ;;
     esac
     
-    sleep 2
+    echo -e "\nPresiona cualquier tecla para continuar..."
+    read -n1
+}
+
+# Clean exit function
+cleanup_and_exit() {
+    stty sane 2>/dev/null
+    tput cnorm 2>/dev/null
+    clear_screen
+    echo -e "${CYAN}¡Hasta luego!${NC}"
+    exit 0
 }
 
 # Main loop
@@ -603,7 +631,10 @@ main() {
     # Setup terminal - same as copy-agents-interactive.sh
     stty -echo -icanon min 1 time 0 2>/dev/null || true
     tput civis 2>/dev/null || true  # Hide cursor
-    trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; clear_screen' EXIT INT TERM
+    
+    # Trap for clean exit - allow Ctrl-C to work
+    trap 'cleanup_and_exit' EXIT
+    trap 'echo ""; cleanup_and_exit' INT TERM
     
     # Detect project
     detect_project
@@ -620,31 +651,36 @@ main() {
         
         case "$key" in
             $'\x1b')  # ESC sequence
-                IFS= read -r -n2 rest
-                case "$rest" in
-                    '[A'|'OA')  # Up arrow
-                        ((current_index--))
-                        if [[ $current_index -lt 0 ]]; then
-                            current_index=$((${#agent_names[@]} - 1))
-                        fi
-                        ;;
-                    '[B'|'OB')  # Down arrow
-                        ((current_index++))
-                        if [[ $current_index -ge ${#agent_names[@]} ]]; then
-                            current_index=0
-                        fi
-                        ;;
-                    '')  # Just ESC - go back
-                        if [[ "$current_mode" != "view" ]]; then
-                            current_mode="view"
-                            # Clear selections
-                            for i in "${!selected[@]}"; do
-                                selected[$i]=false
-                            done
-                            load_all_agents
-                        fi
-                        ;;
-                esac
+                # Try to read next chars with timeout
+                IFS= read -r -t 0.1 -n2 rest 2>/dev/null || rest=""
+                
+                if [[ -z "$rest" ]]; then
+                    # Just ESC pressed - go back to view mode
+                    if [[ "$current_mode" != "view" ]]; then
+                        current_mode="view"
+                        # Clear selections
+                        for i in "${!selected[@]}"; do
+                            selected[$i]=false
+                        done
+                        load_all_agents
+                    fi
+                else
+                    # Arrow keys
+                    case "$rest" in
+                        '[A'|'OA')  # Up arrow
+                            ((current_index--))
+                            if [[ $current_index -lt 0 ]]; then
+                                current_index=$((${#agent_names[@]} - 1))
+                            fi
+                            ;;
+                        '[B'|'OB')  # Down arrow
+                            ((current_index++))
+                            if [[ $current_index -ge ${#agent_names[@]} ]]; then
+                                current_index=0
+                            fi
+                            ;;
+                    esac
+                fi
                 ;;
             
             ' '|$' ')  # Space - select/deselect
@@ -684,6 +720,11 @@ main() {
                         current_mode="view"
                         load_all_agents
                         ;;
+                    "sync")
+                        execute_sync "project_to_user"
+                        current_mode="view"
+                        load_all_agents
+                        ;;
                 esac
                 ;;
             
@@ -702,24 +743,40 @@ main() {
                             load_all_agents
                         fi
                         ;;
+                    "sync")
+                        execute_sync "user_to_project"
+                        current_mode="view"
+                        load_all_agents
+                        ;;
                 esac
                 ;;
             
-            '3')  # Install mode
-                if [[ "$current_mode" == "view" ]]; then
-                    current_mode="install"
-                    # Clear all selections
-                    for i in "${!selected[@]}"; do
-                        selected[$i]=false
-                    done
-                fi
+            '3')  # Install mode or bidirectional sync
+                case "$current_mode" in
+                    "view")
+                        current_mode="install"
+                        # Clear all selections
+                        for i in "${!selected[@]}"; do
+                            selected[$i]=false
+                        done
+                        ;;
+                    "sync")
+                        execute_sync "bidirectional"
+                        current_mode="view"
+                        load_all_agents
+                        ;;
+                esac
                 ;;
             
-            '4')  # Sync
-                if [[ "$current_mode" == "view" ]]; then
-                    sync_agents
-                    load_all_agents
-                fi
+            '4')  # Sync mode or execute sync
+                case "$current_mode" in
+                    "view")
+                        current_mode="sync"
+                        ;;
+                    "sync")
+                        # In sync mode, 4 doesn't do anything
+                        ;;
+                esac
                 ;;
             
             's'|'S')  # Save
