@@ -1,18 +1,19 @@
 # Claude Code Agent Manager
 
-Una herramienta interactiva para gestionar e instalar agentes especializados de Claude Code.
+Una herramienta unificada y avanzada para gestionar agentes especializados de Claude Code a múltiples niveles.
 
 ## Descripción
 
-Este proyecto proporciona herramientas para organizar, seleccionar e instalar agentes especializados de Claude Code en tu entorno local. Incluye una interfaz interactiva con checkboxes, previsualización de agentes, y gestión de conflictos.
+Este proyecto proporciona una herramienta completa para organizar, instalar y gestionar agentes especializados de Claude Code. Incluye una interfaz unificada con visualización de tres columnas, gestión multi-nivel (usuario/proyecto), y operaciones CRUD completas.
 
 ## Estructura del Proyecto
 
 ```
 .
-├── copy-agents.sh                # Script básico de copia
-├── copy-agents-interactive.sh    # Interfaz interactiva completa
-├── copy-agents-multilevel.sh     # Script con soporte multi-nivel
+├── agent-manager.sh              # 🌟 Script unificado principal
+├── copy-agents.sh                # Script básico de copia (legacy)
+├── copy-agents-interactive.sh    # Interfaz interactiva (legacy)
+├── copy-agents-multilevel.sh     # Script multi-nivel (legacy)
 ├── agents-collection/            # Colección de agentes disponibles
 │   ├── platform/                 # Agentes de gestión de plataforma
 │   ├── frontend/                 # Agentes de desarrollo frontend
@@ -23,36 +24,67 @@ Este proyecto proporciona herramientas para organizar, seleccionar e instalar ag
 
 ## Uso
 
-### Instalador Interactivo (Recomendado)
+### 🌟 Gestor Unificado (Recomendado)
 
 ```bash
-./copy-agents-interactive.sh
+./agent-manager.sh
 ```
 
-Características:
-- ✅ Interfaz visual con checkboxes
-- 📋 Vista previa de descripción de cada agente
-- 📊 Panel de seleccionados en múltiples columnas
-- 🔄 Navegación completa (adelante/atrás)
-- 🔍 Detección y gestión de conflictos con diff
-- 📁 Creación automática de directorios
+Características principales:
+- 📊 **Vista de tres columnas**: Usuario | Proyecto | Disponibles
+- 🔄 **Múltiples modos**: Vista, Edición Usuario, Edición Proyecto, Instalación
+- ✅ **Operaciones CRUD completas**: Create, Read, Update, Delete
+- 🎯 **Panel de detalles**: Información completa del agente seleccionado
+- 🔀 **Sincronización**: Entre niveles usuario y proyecto
+- 🎨 **Interfaz visual avanzada**: Con colores y símbolos intuitivos
 
-### Controles de navegación:
+### Modos de Operación
+
+#### 🔍 Modo Vista (Predeterminado)
+- Ver todos los agentes organizados por nivel de instalación
+- Navegar con flechas arriba/abajo
+- Acceder a otros modos con teclas numéricas
+
+#### ✏️ Modo Edición Usuario/Proyecto
+- Gestionar agentes instalados en cada nivel
+- Seleccionar/deseleccionar con ESPACIO
+- Guardar cambios con 's'
+- Eliminar seleccionados con 'd'
+
+#### 📦 Modo Instalación
+- Instalar nuevos agentes desde la colección
+- Elegir destino: Usuario (1) o Proyecto (2)
+- Selección múltiple con checkboxes
+
+### Controles de Navegación
+
+#### Modo Vista:
 - `↑/↓`: Navegar entre agentes
-- `ESPACIO`: Seleccionar/deseleccionar agente
-- `a`: Seleccionar todos
-- `n`: Deseleccionar todos
-- `ENTER`: Continuar al siguiente paso
-- `b`: Volver al paso anterior
+- `1`: Editar agentes de usuario
+- `2`: Editar agentes de proyecto
+- `3`: Instalar nuevos agentes
+- `4`: Sincronizar entre niveles
 - `q`: Salir
 
-### Script Básico
+#### Modos de Edición/Instalación:
+- `↑/↓`: Navegar entre agentes
+- `ESPACIO`: Seleccionar/deseleccionar
+- `a`: Seleccionar todos
+- `n`: Deseleccionar todos
+- `d`: Eliminar seleccionado (solo edición)
+- `s`: Guardar cambios (solo edición)
+- `1/2`: Instalar en Usuario/Proyecto (solo instalación)
+- `ESC`: Volver al modo vista
+
+### Scripts Legacy
+
+Para compatibilidad, se mantienen los scripts anteriores:
 
 ```bash
-./copy-agents.sh
+./copy-agents-interactive.sh     # Instalador interactivo original
+./copy-agents-multilevel.sh      # Selector de nivel
+./copy-agents.sh                  # Script básico
 ```
-
-Script con línea de comandos tradicional para casos simples.
 
 ## Agentes Disponibles
 
