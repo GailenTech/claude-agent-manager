@@ -12,6 +12,7 @@ Este proyecto proporciona herramientas para organizar, seleccionar e instalar ag
 .
 ├── copy-agents.sh                # Script básico de copia
 ├── copy-agents-interactive.sh    # Interfaz interactiva completa
+├── copy-agents-multilevel.sh     # Script con soporte multi-nivel
 ├── agents-collection/            # Colección de agentes disponibles
 │   ├── platform/                 # Agentes de gestión de plataforma
 │   ├── frontend/                 # Agentes de desarrollo frontend
@@ -92,14 +93,41 @@ La colección incluye agentes especializados para diferentes roles y tecnología
    ./copy-agents-interactive.sh
    ```
 
-## Directorio de Destino
+## Niveles de Instalación
 
-Los agentes se instalan típicamente en:
-```
-~/.claude/agents/
+Claude Code soporta agentes en dos niveles:
+
+### 🌍 Nivel Usuario (`~/.claude/agents/`)
+- **Alcance**: Disponibles en todos tus proyectos
+- **Uso**: Agentes de uso general que usas frecuentemente
+- **Persistencia**: Personal, no se comparten
+
+### 📁 Nivel Proyecto (`.claude/agents/`)
+- **Alcance**: Específicos del proyecto actual
+- **Uso**: Agentes especializados para el proyecto
+- **Persistencia**: Se pueden versionar con Git y compartir con el equipo
+
+### 🎯 Script Multi-Nivel
+
+```bash
+./copy-agents-multilevel.sh
 ```
 
-Aunque puedes especificar cualquier directorio personalizado.
+Este script detecta automáticamente:
+- El nivel de instalación deseado
+- La raíz del proyecto (si existe)
+- Crea `.gitignore` apropiado para proyectos
+
+### Ejemplo de uso en equipo:
+```bash
+# En el proyecto, instalar agentes específicos
+./copy-agents-multilevel.sh  # Seleccionar opción 2 (Proyecto)
+
+# Commitear para compartir con el equipo
+git add .claude/agents/
+git commit -m "Add project-specific Claude agents"
+git push
+```
 
 ## Ejemplos de Proyectos
 
