@@ -388,13 +388,13 @@ draw_instructions() {
             echo -e "${DIM}[↑/↓] Navegar  [1] Editar Usuario  [2] Editar Proyecto  [3] Instalar  [4] Sincronizar  [q] Salir${NC}"
             ;;
         "edit_user"|"edit_project")
-            echo -e "${DIM}[↑/↓] Navegar  [ESPACIO] Seleccionar  [a] Todos  [n] Ninguno  [d] Eliminar  [s] Guardar  [ESC] Volver${NC}"
+            echo -e "${DIM}[↑/↓] Navegar  [ESPACIO] Seleccionar  [a] Todos  [n] Ninguno  [d] Eliminar  [s] Guardar  [b] Volver${NC}"
             ;;
         "install")
-            echo -e "${DIM}[↑/↓] Navegar  [ESPACIO] Seleccionar  [a] Todos  [n] Ninguno  [1] →Usuario  [2] →Proyecto  [ESC] Volver${NC}"
+            echo -e "${DIM}[↑/↓] Navegar  [ESPACIO] Seleccionar  [a] Todos  [n] Ninguno  [1] →Usuario  [2] →Proyecto  [b] Volver${NC}"
             ;;
         "sync")
-            echo -e "${DIM}[1] 📁→🌍 Proyecto a Usuario  [2] 🌍→📁 Usuario a Proyecto  [3] 🔄 Bidireccional  [ESC] Volver${NC}"
+            echo -e "${DIM}[1] 📁→🌍 Proyecto a Usuario  [2] 🌍→📁 Usuario a Proyecto  [3] 🔄 Bidireccional  [b] Volver${NC}"
             ;;
     esac
 }
@@ -650,16 +650,8 @@ main() {
         IFS= read -r -n1 key
         
         case "$key" in
-            $'\x1b')  # ESC sequence
-                # Try to read next 2 chars with timeout
-                rest=""
-                if IFS= read -r -t 0.05 -n1 char1 2>/dev/null; then
-                    rest="$char1"
-                    if IFS= read -r -t 0.05 -n1 char2 2>/dev/null; then
-                        rest="${rest}${char2}"
-                    fi
-                fi
-                
+            $'\x1b')  # ESC sequence - handle arrows ONLY
+                IFS= read -r -n2 rest
                 case "$rest" in
                     '[A'|'OA')  # Up arrow
                         ((current_index--))
@@ -673,23 +665,18 @@ main() {
                             current_index=0
                         fi
                         ;;
-                    '[C'|'OC')  # Right arrow (ignore)
-                        ;;
-                    '[D'|'OD')  # Left arrow (ignore) 
-                        ;;
-                    '')  # Just ESC pressed
-                        if [[ "$current_mode" != "view" ]]; then
-                            current_mode="view"
-                            # Clear selections
-                            for i in "${!selected[@]}"; do
-                                selected[$i]=false
-                            done
-                            load_all_agents
-                        fi
-                        ;;
-                    *)  # Other escape sequences (ignore)
-                        ;;
                 esac
+                ;;
+            
+            'b'|'B')  # Back to view mode
+                if [[ "$current_mode" != "view" ]]; then
+                    current_mode="view"
+                    # Clear selections
+                    for i in "${!selected[@]}"; do
+                        selected[$i]=false
+                    done
+                    load_all_agents
+                fi
                 ;;
             
             ' '|$' ')  # Space - select/deselect
