@@ -47,24 +47,6 @@ restore_cursor() { printf "\033[u"; }
 clear_line() { printf "\033[K"; }
 clear_to_bottom() { printf "\033[J"; }
 
-# Cleanup terminal on exit
-cleanup_terminal() {
-    # Restore terminal settings
-    if [[ -n "${STTY_SAVE:-}" ]]; then
-        stty "$STTY_SAVE" 2>/dev/null || stty sane 2>/dev/null
-    else
-        stty sane 2>/dev/null
-    fi
-    
-    # Show cursor
-    if command -v tput &>/dev/null; then
-        tput cnorm 2>/dev/null || true
-    fi
-    
-    # Clear screen
-    clear_screen
-}
-
 # Detect project root
 detect_project() {
     local dir=$(pwd)
@@ -170,24 +152,24 @@ draw_interface() {
     clear_screen
     
     # Header
-    echo -e "${BOLD}${BLUE}╔════════════════════════════════════════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${BLUE}╔═══════════════════════════════════════════════════════════════════════════════════╗${NC}"
     
     case "$current_mode" in
         "view")
-            echo -e "${BOLD}${BLUE}║                                    Claude Agent Manager - Vista General                            ║${NC}"
+            echo -e "${BOLD}${BLUE}║                    Claude Agent Manager - Vista General                           ║${NC}"
             ;;
         "edit_user")
-            echo -e "${BOLD}${BLUE}║                                  Editando Agentes - Nivel Usuario 🌍                              ║${NC}"
+            echo -e "${BOLD}${BLUE}║                  Editando Agentes - Nivel Usuario 🌍                             ║${NC}"
             ;;
         "edit_project")
-            echo -e "${BOLD}${BLUE}║                                  Editando Agentes - Nivel Proyecto 📁                             ║${NC}"
+            echo -e "${BOLD}${BLUE}║                  Editando Agentes - Nivel Proyecto 📁                            ║${NC}"
             ;;
         "install")
-            echo -e "${BOLD}${BLUE}║                                       Instalar Nuevos Agentes                                      ║${NC}"
+            echo -e "${BOLD}${BLUE}║                       Instalar Nuevos Agentes                                     ║${NC}"
             ;;
     esac
     
-    echo -e "${BOLD}${BLUE}╚════════════════════════════════════════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${BOLD}${BLUE}╚═══════════════════════════════════════════════════════════════════════════════════╝${NC}"
     
     # Project info
     if [[ -n "$PROJECT_ROOT" ]]; then
@@ -215,8 +197,8 @@ draw_interface() {
 draw_agent_columns() {
     local start_line=6
     local col1_x=2    # User column
-    local col2_x=35   # Project column
-    local col3_x=68   # Available column
+    local col2_x=30   # Project column  
+    local col3_x=58   # Available column
     
     # Column headers
     move_cursor $start_line $col1_x
@@ -233,7 +215,7 @@ draw_agent_columns() {
     # Draw separators
     move_cursor $((start_line + 1)) 1
     printf "${DIM}"
-    for ((i=1; i<=100; i++)); do printf "─"; done
+    for ((i=1; i<=85; i++)); do printf "─"; done
     printf "${NC}\n"
     
     # List agents by location
@@ -276,21 +258,21 @@ draw_agent_columns() {
         case "$location" in
             "user")
                 move_cursor $y $col1_x
-                echo -ne "$marker $checkbox $highlight${name:0:25}${NC}"
+                echo -ne "$marker $checkbox $highlight${name:0:22}${NC}"
                 ;;
             "project")
                 move_cursor $y $col2_x
-                echo -ne "$marker $checkbox $highlight${name:0:25}${NC}"
+                echo -ne "$marker $checkbox $highlight${name:0:22}${NC}"
                 ;;
             "available")
                 move_cursor $y $col3_x
-                echo -ne "$marker $checkbox $highlight${name:0:25}${NC}"
+                echo -ne "$marker $checkbox $highlight${name:0:22}${NC}"
                 ;;
             "both")
                 move_cursor $y $col1_x
-                echo -ne "$marker $checkbox $highlight${name:0:25}${NC}"
+                echo -ne "$marker $checkbox $highlight${name:0:22}${NC}"
                 move_cursor $y $col2_x
-                echo -ne "  $checkbox $highlight${name:0:25}${NC}"
+                echo -ne "  $checkbox $highlight${name:0:22}${NC}"
                 ;;
         esac
     done
@@ -304,7 +286,7 @@ draw_agent_columns() {
 
 # Draw details panel
 draw_details_panel() {
-    local panel_x=105
+    local panel_x=88
     local panel_y=6
     
     # Panel border
@@ -375,7 +357,7 @@ draw_details_panel() {
 draw_instructions() {
     move_cursor 21 1
     printf "${DIM}"
-    for ((i=1; i<=140; i++)); do printf "─"; done
+    for ((i=1; i<=85; i++)); do printf "─"; done
     printf "${NC}\n"
     
     move_cursor 22 2
@@ -601,48 +583,10 @@ sync_agents() {
 
 # Main loop
 main() {
-    # Check if terminal is interactive
-    if ! [ -t 0 ] || ! [ -t 1 ]; then
-        echo -e "${BOLD}${RED}═══════════════════════════════════════════════════════════════════${NC}"
-        echo -e "${BOLD}${RED}       ⚠️  Terminal Interactivo Requerido ⚠️${NC}"
-        echo -e "${BOLD}${RED}═══════════════════════════════════════════════════════════════════${NC}"
-        echo ""
-        echo -e "${YELLOW}Este script requiere un terminal interactivo para funcionar.${NC}"
-        echo -e "${YELLOW}Por favor, ejecútalo directamente en tu terminal:${NC}"
-        echo ""
-        echo -e "${CYAN}    ./agent-manager.sh${NC}"
-        echo ""
-        echo -e "${DIM}Alternativamente, puedes usar la versión CLI:${NC}"
-        echo -e "${CYAN}    ./agent-manager-cli.sh help${NC}"
-        echo ""
-        exit 1
-    fi
-    
-    # Save original terminal settings
-    STTY_SAVE=$(stty -g 2>/dev/null)
-    
-    # Setup terminal with better error handling
-    if ! stty -echo -icanon min 1 time 0 2>/dev/null; then
-        echo -e "${RED}Error: No se pudo configurar el terminal${NC}"
-        echo -e "${YELLOW}Esto puede ocurrir si:${NC}"
-        echo -e "${DIM}  • Estás usando un emulador de terminal incompatible${NC}"
-        echo -e "${DIM}  • El script se ejecuta a través de ssh sin TTY${NC}"
-        echo -e "${DIM}  • Hay problemas con los permisos del terminal${NC}"
-        echo ""
-        echo -e "${CYAN}Alternativas:${NC}"
-        echo -e "  1. Usa la versión CLI: ${CYAN}./agent-manager-cli.sh${NC}"
-        echo -e "  2. Prueba con bash: ${CYAN}bash ./agent-manager.sh${NC}"
-        echo -e "  3. Usa los scripts legacy: ${CYAN}./copy-agents-interactive.sh${NC}"
-        exit 2
-    fi
-    
-    # Hide cursor if possible
-    if command -v tput &>/dev/null; then
-        tput civis 2>/dev/null || true
-    fi
-    
-    # Setup cleanup trap
-    trap cleanup_terminal EXIT INT TERM
+    # Setup terminal - same as copy-agents-interactive.sh
+    stty -echo -icanon min 1 time 0
+    tput civis  # Hide cursor
+    trap 'stty sane; tput cnorm; clear_screen' EXIT
     
     # Detect project
     detect_project
