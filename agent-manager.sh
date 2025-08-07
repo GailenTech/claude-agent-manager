@@ -583,10 +583,32 @@ sync_agents() {
 
 # Main loop
 main() {
+    # Check if terminal is interactive
+    if ! [ -t 0 ] || ! [ -t 1 ]; then
+        echo -e "${BOLD}${RED}═══════════════════════════════════════════════════════════════════${NC}"
+        echo -e "${BOLD}${RED}       ⚠️  Terminal Interactivo Requerido ⚠️${NC}"
+        echo -e "${BOLD}${RED}═══════════════════════════════════════════════════════════════════${NC}"
+        echo ""
+        echo -e "${YELLOW}Este script requiere un terminal interactivo para funcionar.${NC}"
+        echo -e "${YELLOW}Por favor, ejecútalo directamente en tu terminal:${NC}"
+        echo ""
+        echo -e "${CYAN}    ./agent-manager.sh${NC}"
+        echo ""
+        echo -e "${DIM}Alternativamente, puedes usar los scripts no-interactivos:${NC}"
+        echo -e "${DIM}  • ./copy-agents.sh           - Script básico${NC}"
+        echo -e "${DIM}  • ./copy-agents-multilevel.sh - Selector de nivel${NC}"
+        echo ""
+        exit 1
+    fi
+    
     # Setup terminal
-    stty -echo -icanon min 1 time 0
-    tput civis  # Hide cursor
-    trap 'stty sane; tput cnorm; clear_screen' EXIT
+    stty -echo -icanon min 1 time 0 2>/dev/null || {
+        echo -e "${RED}Error: No se pudo configurar el terminal${NC}"
+        echo -e "${YELLOW}Intenta ejecutar: bash ./agent-manager.sh${NC}"
+        exit 1
+    }
+    tput civis 2>/dev/null  # Hide cursor
+    trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; clear_screen' EXIT
     
     # Detect project
     detect_project

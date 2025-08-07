@@ -24,11 +24,13 @@ Este proyecto proporciona una herramienta completa para organizar, instalar y ge
 
 ## Uso
 
-### 🌟 Gestor Unificado (Recomendado)
+### 🌟 Gestor Unificado Interactivo
 
 ```bash
 ./agent-manager.sh
 ```
+
+**Nota**: Este script requiere un terminal interactivo. Ejecútalo directamente en tu terminal, no desde herramientas automatizadas.
 
 Características principales:
 - 📊 **Vista de tres columnas**: Usuario | Proyecto | Disponibles
@@ -75,6 +77,26 @@ Características principales:
 - `s`: Guardar cambios (solo edición)
 - `1/2`: Instalar en Usuario/Proyecto (solo instalación)
 - `ESC`: Volver al modo vista
+
+### 🖥️ Gestor CLI (Para automatización)
+
+```bash
+./agent-manager-cli.sh [comando] [opciones]
+```
+
+Comandos disponibles:
+- `list`: Lista todos los agentes y su estado de instalación
+- `status`: Muestra resumen de instalación
+- `install --user --agent NAME`: Instala agente específico
+- `install-all --project`: Instala todos los agentes en proyecto
+
+Ejemplos:
+```bash
+./agent-manager-cli.sh list
+./agent-manager-cli.sh install --user --agent openapi-expert
+./agent-manager-cli.sh install-all --project
+./agent-manager-cli.sh status
+```
 
 ### Scripts Legacy
 
