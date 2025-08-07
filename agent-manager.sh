@@ -1,7 +1,12 @@
 #!/bin/bash
 
 # Claude Agent Manager v2.0 - Advanced unified interface
-set -e
+
+# Ensure we're running in bash
+if [ -z "$BASH_VERSION" ]; then
+    echo "This script requires bash. Running with bash..."
+    exec bash "$0" "$@"
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -83,62 +88,74 @@ load_all_agents() {
     agent_locations=()
     selected=()
     
-    declare -A agent_map
+    # Temporary files for tracking
+    local temp_dir="/tmp/agent_manager_$$"
+    mkdir -p "$temp_dir"
+    trap "rm -rf $temp_dir" RETURN
     
-    # Load from collection (available)
+    # Load all available agents first
     while IFS= read -r file; do
+        [[ -f "$file" ]] || continue
         local info=$(get_agent_info "$file")
         local name="${info%%|*}"
         local desc="${info#*|}"
-        agent_map["$name"]="available|$desc|$file"
+        echo "$name|available|$desc" > "$temp_dir/$name.info"
     done < <(find "$AGENTS_COLLECTION" -name "*.md" -type f 2>/dev/null | sort)
     
-    # Load from user level
+    # Check user level agents
     if [[ -d "$USER_AGENTS" ]]; then
         while IFS= read -r file; do
-            local info=$(get_agent_info "$file")
-            local name="${info%%|*}"
-            local desc="${info#*|}"
+            [[ -f "$file" ]] || continue
+            local name=$(basename "$file" .md)
+            local desc=$(grep "^description:" "$file" 2>/dev/null | sed 's/description: //' | head -c 60) || desc=""
             
-            if [[ -n "${agent_map[$name]}" ]]; then
-                local existing="${agent_map[$name]}"
-                if [[ "$existing" == "available|"* ]]; then
-                    agent_map["$name"]="user|$desc|$file"
-                elif [[ "$existing" == "project|"* ]]; then
-                    agent_map["$name"]="both|$desc|$file"
+            if [[ -f "$temp_dir/$name.info" ]]; then
+                # Update existing entry
+                local current=$(cat "$temp_dir/$name.info")
+                local current_loc="${current#*|}"
+                current_loc="${current_loc%%|*}"
+                if [[ "$current_loc" == "available" ]]; then
+                    echo "$name|user|$desc" > "$temp_dir/$name.info"
+                elif [[ "$current_loc" == "project" ]]; then
+                    echo "$name|both|$desc" > "$temp_dir/$name.info"
                 fi
             else
-                agent_map["$name"]="user|$desc|$file"
+                echo "$name|user|$desc" > "$temp_dir/$name.info"
             fi
         done < <(find "$USER_AGENTS" -maxdepth 1 -name "*.md" -type f 2>/dev/null | sort)
     fi
     
-    # Load from project level
+    # Check project level agents
     if [[ -n "$PROJECT_ROOT" ]] && [[ -d "$PROJECT_AGENTS" ]]; then
         while IFS= read -r file; do
-            local info=$(get_agent_info "$file")
-            local name="${info%%|*}"
-            local desc="${info#*|}"
+            [[ -f "$file" ]] || continue
+            local name=$(basename "$file" .md)
+            local desc=$(grep "^description:" "$file" 2>/dev/null | sed 's/description: //' | head -c 60) || desc=""
             
-            if [[ -n "${agent_map[$name]}" ]]; then
-                local existing="${agent_map[$name]}"
-                if [[ "$existing" == "available|"* ]]; then
-                    agent_map["$name"]="project|$desc|$file"
-                elif [[ "$existing" == "user|"* ]]; then
-                    agent_map["$name"]="both|$desc|$file"
+            if [[ -f "$temp_dir/$name.info" ]]; then
+                # Update existing entry
+                local current=$(cat "$temp_dir/$name.info")
+                local current_loc="${current#*|}"
+                current_loc="${current_loc%%|*}"
+                if [[ "$current_loc" == "available" ]]; then
+                    echo "$name|project|$desc" > "$temp_dir/$name.info"
+                elif [[ "$current_loc" == "user" ]]; then
+                    echo "$name|both|$desc" > "$temp_dir/$name.info"
                 fi
             else
-                agent_map["$name"]="project|$desc|$file"
+                echo "$name|project|$desc" > "$temp_dir/$name.info"
             fi
         done < <(find "$PROJECT_AGENTS" -maxdepth 1 -name "*.md" -type f 2>/dev/null | sort)
     fi
     
-    # Convert map to arrays
-    for name in $(echo "${!agent_map[@]}" | tr ' ' '\n' | sort); do
-        local data="${agent_map[$name]}"
-        local location="${data%%|*}"
-        local rest="${data#*|}"
-        local desc="${rest%%|*}"
+    # Build arrays from temp files
+    for info_file in $(ls "$temp_dir"/*.info 2>/dev/null | sort); do
+        [[ -f "$info_file" ]] || continue
+        local content=$(cat "$info_file")
+        local name="${content%%|*}"
+        local rest="${content#*|}"
+        local location="${rest%%|*}"
+        local desc="${rest#*|}"
         
         agent_names+=("$name")
         agent_descriptions+=("$desc")
@@ -584,9 +601,9 @@ sync_agents() {
 # Main loop
 main() {
     # Setup terminal - same as copy-agents-interactive.sh
-    stty -echo -icanon min 1 time 0
-    tput civis  # Hide cursor
-    trap 'stty sane; tput cnorm; clear_screen' EXIT
+    stty -echo -icanon min 1 time 0 2>/dev/null || true
+    tput civis 2>/dev/null || true  # Hide cursor
+    trap 'stty sane 2>/dev/null; tput cnorm 2>/dev/null; clear_screen' EXIT INT TERM
     
     # Detect project
     detect_project
