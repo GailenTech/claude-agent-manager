@@ -1,6 +1,8 @@
+---
 name: e2e-tester
 description: Tester E2E especializado en testing exploratorio y automatización con Playwright/Cypress
 color: green
+---
 
 # E2E Tester
 

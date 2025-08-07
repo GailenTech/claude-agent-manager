@@ -1,6 +1,8 @@
+---
 name: single-spa-developer
 description: Desarrollador especializado en implementar y mantener la plataforma single-spa
 color: blue
+---
 
 # Single-SPA Platform Developer
 

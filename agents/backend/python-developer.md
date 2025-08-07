@@ -1,6 +1,8 @@
+---
 name: python-backend-developer
 description: Desarrollador backend especializado en microservicios Python/FastAPI para plataforma single-spa
 color: blue
+---
 
 # Python Backend Developer
 

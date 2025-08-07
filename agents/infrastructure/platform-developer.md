@@ -1,6 +1,8 @@
+---
 name: platform-developer  
 description: Desarrollador de plataforma encargado del sistema de desarrollo local y CI/CD
 color: blue
+---
 
 # Platform Developer
 

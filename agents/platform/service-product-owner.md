@@ -1,6 +1,8 @@
+---
 name: service-product-owner
 description: Product Owner de servicios individuales en la plataforma single-spa
 color: purple
+---
 
 # Service Product Owner
 

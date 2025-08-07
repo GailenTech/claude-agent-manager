@@ -1,6 +1,8 @@
+---
 name: nodejs-backend-developer
 description: Desarrollador backend especializado en microservicios Node.js para plataforma single-spa
 color: green
+---
 
 # Node.js Backend Developer
 

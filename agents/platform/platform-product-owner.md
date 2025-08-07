@@ -1,6 +1,8 @@
+---
 name: platform-product-owner
 description: Product Owner especializado en la plataforma single-spa empresarial
 color: purple
+---
 
 # Platform Product Owner
 

@@ -1,6 +1,8 @@
+---
 name: vue3-developer
 description: Desarrollador frontend especializado en micro-frontends Vue 3 para single-spa
 color: green
+---
 
 # Vue3 Frontend Developer
 

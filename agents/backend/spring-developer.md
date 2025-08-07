@@ -1,6 +1,8 @@
+---
 name: spring-backend-developer
 description: Desarrollador backend especializado en microservicios Spring Boot para plataforma single-spa
 color: green
+---
 
 # Spring Backend Developer
 

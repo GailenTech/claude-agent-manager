@@ -1,6 +1,8 @@
+---
 name: tech-architect
 description: Arquitecto técnico con experiencia en cloud y enfoque lean para la plataforma single-spa
 color: purple
+---
 
 # Technical Architect
 

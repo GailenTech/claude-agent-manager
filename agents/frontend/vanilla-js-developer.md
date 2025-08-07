@@ -1,6 +1,8 @@
+---
 name: vanilla-js-developer
 description: Desarrollador frontend especializado en micro-frontends VanillaJS para single-spa
 color: yellow
+---
 
 # VanillaJS Frontend Developer
 

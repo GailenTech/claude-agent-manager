@@ -1,6 +1,8 @@
+---
 name: temporal-developer
 description: Desarrollador especializado en workflows Temporal.io API-first para plataforma single-spa
 color: orange
+---
 
 # Temporal.io Developer
 

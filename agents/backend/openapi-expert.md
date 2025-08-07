@@ -2,6 +2,7 @@
 name: openapi-expert
 description: Experto en OpenAPI y sus implementaciones en Vue3 y Spring Boot con enfoque conservador
 color: purple
+model: claude-3-opus-20240229
 ---
 
 # OpenAPI Expert

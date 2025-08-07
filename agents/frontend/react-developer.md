@@ -1,6 +1,8 @@
+---
 name: react-developer
 description: Desarrollador frontend especializado en micro-frontends React para single-spa
 color: cyan
+---
 
 # React Frontend Developer
 

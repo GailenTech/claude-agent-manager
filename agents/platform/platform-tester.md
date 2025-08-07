@@ -1,6 +1,8 @@
+---
 name: platform-tester
 description: Tester especializado en calidad de plataformas single-spa
 color: green
+---
 
 # Platform Tester
 
