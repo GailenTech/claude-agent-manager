@@ -1,106 +1,129 @@
-# Single-SPA Platform Development Agents
+# Claude Code Agent Manager
 
-## Descripción del Proyecto
+Una herramienta interactiva para gestionar e instalar agentes especializados de Claude Code.
 
-Este repositorio es el resultado de un prompt experimental para generar agentes de desarrollo especializados que puedan integrarse en ciclos de desarrollo de software. El objetivo es crear una estructura completa de agentes con roles específicos para desarrollar y mantener una plataforma empresarial basada en single-spa.
+## Descripción
 
-## Origen
+Este proyecto proporciona herramientas para organizar, seleccionar e instalar agentes especializados de Claude Code en tu entorno local. Incluye una interfaz interactiva con checkboxes, previsualización de agentes, y gestión de conflictos.
 
-Este proyecto fue generado a partir de un prompt inicial que solicitaba:
-- Crear una versión especializada de CLAUDE.md para desarrollo con single-spa
-- Utilizar context7 para descubrir mejores prácticas
-- Diseñar una estructura de plataforma de servicios empresariales
-- Definir múltiples perfiles de agentes especializados para diferentes aspectos del desarrollo
-
-## Estructura de la Plataforma
-
-La plataforma objetivo es un sistema empresarial basado en single-spa que incluye:
-
-### Frontend
-- **Shell principal**: Interfaz genérico de acceso a herramientas
-- **Menú de identificación**: Sistema de autenticación OAuth2/Keycloak
-- **Catálogo de herramientas**: Menú lateral con aplicaciones registradas
-- **Aplicaciones de ejemplo**:
-  - Aplicación VanillaJS
-  - Aplicación Vue3
-  - Aplicación React
-
-### Backend
-- Servicios independientes por aplicación
-- Sistema basado en Temporal.io con aproximación API-first
-- Arquitectura multitenant
-
-### Infraestructura
-- Desarrollo local con docker-compose
-- CI/CD con GitHub Actions
-- Trazabilidad continua con Git
-
-## Agentes de Desarrollo
-
-Este repositorio contiene las definiciones y configuraciones para los siguientes agentes especializados:
-
-### Agentes de Plataforma
-- **Platform Product Owner**: Gestión del producto single-spa
-- **Single-SPA Developer**: Desarrollo de la plataforma
-- **Platform Tester**: Testing de la plataforma single-spa
-
-### Agentes de Servicios
-- **Service Product Owner**: Definición de servicios y planes de prueba
-- **Frontend VanillaJS Developer**
-- **Frontend Vue3 Developer**
-- **React Developer**
-
-### Agentes de Backend
-- **Spring Expert Developer**
-- **Python Backend Developer**
-- **NodeJS Backend Developer**
-- **Temporal.io API Developer**
-
-### Agentes de Infraestructura
-- **Tech Architect**: Arquitectura cloud (GCP, AWS) con enfoque lean
-- **Platform Developer**: Mantenimiento del sistema de desarrollo
-- **E2E Tester**: Testing exploratorio con Playwright MCP y automatización
-
-## Estructura del Repositorio
+## Estructura del Proyecto
 
 ```
-single-spa-platform-agents/
-├── README.md                    # Este archivo
-├── CLAUDE.md                    # Instrucciones principales para single-spa
-├── DOCS.md                      # Índice de documentación
-├── docs/                        # Documentación del proyecto
-│   ├── DIARY.md                # Diario de desarrollo
-│   ├── architecture/           # Documentación de arquitectura
-│   └── platform/               # Documentación de la plataforma
-├── agents/                      # Perfiles de agentes
-│   ├── platform/               # Agentes de plataforma
-│   ├── frontend/               # Agentes de frontend
-│   ├── backend/                # Agentes de backend
-│   └── infrastructure/         # Agentes de infraestructura
-└── claude_tools/               # Scripts y herramientas auxiliares
+.
+├── copy-agents.sh                # Script básico de copia
+├── copy-agents-interactive.sh    # Interfaz interactiva completa
+├── agents-collection/            # Colección de agentes disponibles
+│   ├── platform/                 # Agentes de gestión de plataforma
+│   ├── frontend/                 # Agentes de desarrollo frontend
+│   ├── backend/                  # Agentes de desarrollo backend
+│   └── infrastructure/           # Agentes de infraestructura
+└── examples/                     # Ejemplos de proyectos específicos
 ```
 
 ## Uso
 
-Este repositorio está diseñado para ser utilizado con Claude Code y otros agentes de codificación. Cada perfil de agente contiene:
-- Instrucciones específicas del rol
-- Mejores prácticas para su dominio
-- Guías de integración con otros agentes
-- Planes de validación y testing
+### Instalador Interactivo (Recomendado)
 
-## Desarrollo
+```bash
+./copy-agents-interactive.sh
+```
 
-Todo el desarrollo debe seguir las siguientes directrices:
-- Trazabilidad continua en Git
-- Testing completo antes de integración
-- Documentación actualizada en DIARY.md
-- Uso de feature branches para nuevas funcionalidades
-- CI/CD obligatorio para despliegues
+Características:
+- ✅ Interfaz visual con checkboxes
+- 📋 Vista previa de descripción de cada agente
+- 📊 Panel de seleccionados en múltiples columnas
+- 🔄 Navegación completa (adelante/atrás)
+- 🔍 Detección y gestión de conflictos con diff
+- 📁 Creación automática de directorios
+
+### Controles de navegación:
+- `↑/↓`: Navegar entre agentes
+- `ESPACIO`: Seleccionar/deseleccionar agente
+- `a`: Seleccionar todos
+- `n`: Deseleccionar todos
+- `ENTER`: Continuar al siguiente paso
+- `b`: Volver al paso anterior
+- `q`: Salir
+
+### Script Básico
+
+```bash
+./copy-agents.sh
+```
+
+Script con línea de comandos tradicional para casos simples.
+
+## Agentes Disponibles
+
+La colección incluye agentes especializados para diferentes roles y tecnologías:
+
+### 🏛️ Platform
+- **Platform Product Owner**: Gestión de producto de plataforma
+- **Single-SPA Developer**: Desarrollo de shells y micro-frontends
+- **Platform Tester**: Testing de integraciones y plataformas
+- **Service Product Owner**: Gestión de servicios individuales
+
+### 🎨 Frontend
+- **VanillaJS Developer**: Desarrollo sin frameworks
+- **Vue3 Developer**: Desarrollo reactivo con Vue 3
+- **React Developer**: Desarrollo moderno con React
+
+### ⚙️ Backend
+- **Spring Developer**: Microservicios con Spring Boot
+- **Python Developer**: APIs con FastAPI/Flask
+- **Node.js Developer**: Servicios con Express/Fastify
+- **Temporal Developer**: Workflows con Temporal.io
+- **OpenAPI Expert**: Especificaciones y generación de código
+
+### 🔧 Infrastructure
+- **Tech Architect**: Arquitectura cloud y decisiones técnicas
+- **Platform Developer**: DevOps y sistemas de desarrollo
+- **E2E Tester**: Testing end-to-end y automatización
+
+## Instalación
+
+1. Clona este repositorio
+2. Haz los scripts ejecutables:
+   ```bash
+   chmod +x copy-agents.sh copy-agents-interactive.sh
+   ```
+3. Ejecuta el instalador interactivo:
+   ```bash
+   ./copy-agents-interactive.sh
+   ```
+
+## Directorio de Destino
+
+Los agentes se instalan típicamente en:
+```
+~/.claude/agents/
+```
+
+Aunque puedes especificar cualquier directorio personalizado.
+
+## Ejemplos de Proyectos
+
+La carpeta `examples/` contiene configuraciones y documentación específica para diferentes tipos de proyectos, incluyendo guías de arquitectura y patrones de desarrollo.
+
+## Contribuir
+
+Para añadir nuevos agentes:
+
+1. Crea el archivo `.md` en la carpeta apropiada dentro de `agents-collection/`
+2. Usa el formato estándar:
+   ```markdown
+   ---
+   name: nombre-del-agente
+   description: Descripción breve del agente
+   color: color-para-ui
+   ---
+   
+   # Nombre del Agente
+   
+   Descripción detallada y instrucciones...
+   ```
+3. Testa con el script interactivo
 
 ## Licencia
 
-Proyecto privado de GailenTech. Todos los derechos reservados.
-
----
-
-*Generado con Claude Code - Proyecto experimental de agentes de desarrollo*
+Proyecto privado. Todos los derechos reservados.
