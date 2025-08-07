@@ -651,11 +651,43 @@ main() {
         
         case "$key" in
             $'\x1b')  # ESC sequence
-                # Try to read next chars with timeout
-                IFS= read -r -t 0.1 -n2 rest 2>/dev/null || rest=""
-                
-                if [[ -z "$rest" ]]; then
-                    # Just ESC pressed - go back to view mode
+                # Read one more character with very short timeout
+                if IFS= read -r -t 0.001 -n1 next_char 2>/dev/null; then
+                    # If it's '[' or 'O', it's likely an arrow key
+                    if [[ "$next_char" == "[" ]] || [[ "$next_char" == "O" ]]; then
+                        # Read the final character
+                        IFS= read -r -n1 final_char
+                        case "$final_char" in
+                            'A')  # Up arrow
+                                ((current_index--))
+                                if [[ $current_index -lt 0 ]]; then
+                                    current_index=$((${#agent_names[@]} - 1))
+                                fi
+                                ;;
+                            'B')  # Down arrow
+                                ((current_index++))
+                                if [[ $current_index -ge ${#agent_names[@]} ]]; then
+                                    current_index=0
+                                fi
+                                ;;
+                            'C')  # Right arrow (ignore)
+                                ;;
+                            'D')  # Left arrow (ignore)
+                                ;;
+                        esac
+                    else
+                        # Not an arrow key, treat as ESC
+                        if [[ "$current_mode" != "view" ]]; then
+                            current_mode="view"
+                            # Clear selections
+                            for i in "${!selected[@]}"; do
+                                selected[$i]=false
+                            done
+                            load_all_agents
+                        fi
+                    fi
+                else
+                    # No next character, it's just ESC
                     if [[ "$current_mode" != "view" ]]; then
                         current_mode="view"
                         # Clear selections
@@ -664,22 +696,6 @@ main() {
                         done
                         load_all_agents
                     fi
-                else
-                    # Arrow keys
-                    case "$rest" in
-                        '[A'|'OA')  # Up arrow
-                            ((current_index--))
-                            if [[ $current_index -lt 0 ]]; then
-                                current_index=$((${#agent_names[@]} - 1))
-                            fi
-                            ;;
-                        '[B'|'OB')  # Down arrow
-                            ((current_index++))
-                            if [[ $current_index -ge ${#agent_names[@]} ]]; then
-                                current_index=0
-                            fi
-                            ;;
-                    esac
                 fi
                 ;;
             
