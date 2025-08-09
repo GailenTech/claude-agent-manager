@@ -1,223 +1,157 @@
-# Claude Code Agent Manager
+# Claude Agent Manager
 
-Una herramienta unificada y avanzada para gestionar agentes especializados de Claude Code a múltiples niveles.
+Una herramienta profesional para gestionar agentes especializados de Claude Code con una interfaz intuitiva basada en curses.
 
-## Descripción
+## 🚀 Instalación Rápida
 
-Este proyecto proporciona una herramienta completa para organizar, instalar y gestionar agentes especializados de Claude Code. Incluye una interfaz unificada con visualización de tres columnas, gestión multi-nivel (usuario/proyecto), y operaciones CRUD completas.
+### Requisitos
+- Python 3.6+
+- Terminal con soporte para curses
+- Git (para clonar el repositorio)
 
-## Estructura del Proyecto
-
-```
-.
-├── agent-manager.sh              # 🌟 Script unificado principal
-├── copy-agents.sh                # Script básico de copia (legacy)
-├── copy-agents-interactive.sh    # Interfaz interactiva (legacy)
-├── copy-agents-multilevel.sh     # Script multi-nivel (legacy)
-├── agents-collection/            # Colección de agentes disponibles
-│   ├── platform/                 # Agentes de gestión de plataforma
-│   ├── frontend/                 # Agentes de desarrollo frontend
-│   ├── backend/                  # Agentes de desarrollo backend
-│   └── infrastructure/           # Agentes de infraestructura
-└── examples/                     # Ejemplos de proyectos específicos
-```
-
-## Uso
-
-### 🐍 Gestor Python con Curses (RECOMENDADO)
+### Instalación
 
 ```bash
-./agent-manager.py
+# Clonar el repositorio
+git clone https://github.com/GailenTech/single-spa-platform-agents.git claude-agent-manager
+cd claude-agent-manager
+
+# Ejecutar el instalador
+chmod +x install.sh
+./install.sh
 ```
 
-**Ventajas**:
-- ✅ ESC y flechas funcionan perfectamente
-- ✅ Interfaz más robusta y fluida
-- ✅ Sin problemas de detección de teclas
-- ✅ Mejor manejo de errores
+El instalador te ofrecerá tres opciones:
+1. **Instalación sistema** (`/usr/local/bin`) - Recomendado
+2. **Instalación usuario** (`~/.local/bin`) - Sin sudo
+3. **Ubicación personalizada**
 
-### 🌟 Gestor Bash Interactivo
+### Uso
+
+Una vez instalado, simplemente ejecuta:
 
 ```bash
-./agent-manager.sh
+agent-manager
 ```
 
-**Nota**: Usa 'b' para volver (ESC no es compatible con flechas en bash).
+## 🎮 Controles
 
-Características principales:
-- 📊 **Vista de tres columnas**: Usuario | Proyecto | Disponibles
-- 🔄 **Múltiples modos**: Vista, Edición Usuario, Edición Proyecto, Instalación
-- ✅ **Operaciones CRUD completas**: Create, Read, Update, Delete
-- 🎯 **Panel de detalles**: Información completa del agente seleccionado
-- 🔀 **Sincronización**: Entre niveles usuario y proyecto
-- 🎨 **Interfaz visual avanzada**: Con colores y símbolos intuitivos
+### Navegación
+- `↑/↓` - Navegar por la lista de agentes
+- `SPACE` - Seleccionar/deseleccionar agente
+- `1` - Vista General (agentes de usuario)
+- `2` - Vista Proyecto (agentes del proyecto actual)
 
-### Modos de Operación
+### Acciones
+- `v` - Ver contenido del agente (solo lectura)
+- `s` - Guardar cambios (con confirmación)
+- `r` - Recargar y descartar cambios
+- `ESC` - Cancelar cambios pendientes
+- `q` - Salir
 
-#### 🔍 Modo Vista (Predeterminado)
-- Ver todos los agentes organizados por nivel de instalación
-- Navegar con flechas arriba/abajo
-- Acceder a otros modos con teclas numéricas
+### Indicadores Visuales
+- `[✓]` - Agente instalado/seleccionado
+- `[ ]` - Agente no instalado/no seleccionado
+- `+` (verde) - Agente será añadido
+- `-` (rojo) - Agente será eliminado
+- `*` - Agente nuevo (< 48 horas)
 
-#### ✏️ Modo Edición Usuario/Proyecto
-- Gestionar agentes instalados en cada nivel
-- Seleccionar/deseleccionar con ESPACIO
-- Guardar cambios con 's'
-- Eliminar seleccionados con 'd'
+## 📂 Estructura de Agentes
 
-#### 📦 Modo Instalación
-- Instalar nuevos agentes desde la colección
-- Elegir destino: Usuario (1) o Proyecto (2)
-- Selección múltiple con checkboxes
+Los agentes están organizados por categorías:
 
-### Controles de Navegación
+```
+═══ PLATFORM ═══
+  Agentes para gestión de productos y plataformas
 
-#### Modo Vista:
-- `↑/↓`: Navegar entre agentes
-- `1`: Editar agentes de usuario
-- `2`: Editar agentes de proyecto
-- `3`: Instalar nuevos agentes
-- `4`: Sincronizar entre niveles
-- `q`: Salir
+═══ FRONTEND ═══
+  Desarrolladores especializados en interfaces de usuario
 
-#### Modos de Edición/Instalación:
-- `↑/↓`: Navegar entre agentes
-- `ESPACIO`: Seleccionar/deseleccionar
-- `a`: Seleccionar todos
-- `n`: Deseleccionar todos
-- `d`: Eliminar seleccionado (solo edición)
-- `s`: Guardar cambios (solo edición)
-- `1/2`: Instalar en Usuario/Proyecto (solo instalación)
-- `ESC`: Volver al modo vista
+═══ BACKEND ═══
+  Expertos en servicios y APIs backend
 
-### 🖥️ Gestor CLI (Para automatización)
-
-```bash
-./agent-manager-cli.sh [comando] [opciones]
+═══ INFRASTRUCTURE ═══
+  Especialistas en DevOps, testing y arquitectura
 ```
 
-Comandos disponibles:
-- `list`: Lista todos los agentes y su estado de instalación
-- `status`: Muestra resumen de instalación
-- `install --user --agent NAME`: Instala agente específico
-- `install-all --project`: Instala todos los agentes en proyecto
+## 🔧 Niveles de Instalación
 
-Ejemplos:
-```bash
-./agent-manager-cli.sh list
-./agent-manager-cli.sh install --user --agent openapi-expert
-./agent-manager-cli.sh install-all --project
-./agent-manager-cli.sh status
-```
-
-### Scripts Legacy
-
-Para compatibilidad, se mantienen los scripts anteriores:
-
-```bash
-./copy-agents-interactive.sh     # Instalador interactivo original
-./copy-agents-multilevel.sh      # Selector de nivel
-./copy-agents.sh                  # Script básico
-```
-
-## Agentes Disponibles
-
-La colección incluye agentes especializados para diferentes roles y tecnologías:
-
-### 🏛️ Platform
-- **Platform Product Owner**: Gestión de producto de plataforma
-- **Single-SPA Developer**: Desarrollo de shells y micro-frontends
-- **Platform Tester**: Testing de integraciones y plataformas
-- **Service Product Owner**: Gestión de servicios individuales
-
-### 🎨 Frontend
-- **VanillaJS Developer**: Desarrollo sin frameworks
-- **Vue3 Developer**: Desarrollo reactivo con Vue 3
-- **React Developer**: Desarrollo moderno con React
-
-### ⚙️ Backend
-- **Spring Developer**: Microservicios con Spring Boot
-- **Python Developer**: APIs con FastAPI/Flask
-- **Node.js Developer**: Servicios con Express/Fastify
-- **Temporal Developer**: Workflows con Temporal.io
-- **OpenAPI Expert**: Especificaciones y generación de código
-
-### 🔧 Infrastructure
-- **Tech Architect**: Arquitectura cloud y decisiones técnicas
-- **Platform Developer**: DevOps y sistemas de desarrollo
-- **E2E Tester**: Testing end-to-end y automatización
-
-## Instalación
-
-1. Clona este repositorio
-2. Haz los scripts ejecutables:
-   ```bash
-   chmod +x copy-agents.sh copy-agents-interactive.sh
-   ```
-3. Ejecuta el instalador interactivo:
-   ```bash
-   ./copy-agents-interactive.sh
-   ```
-
-## Niveles de Instalación
-
-Claude Code soporta agentes en dos niveles:
-
-### 🌍 Nivel Usuario (`~/.claude/agents/`)
+### 🌍 Vista General (Usuario)
+- **Ubicación**: `~/.claude/agents/`
 - **Alcance**: Disponibles en todos tus proyectos
-- **Uso**: Agentes de uso general que usas frecuentemente
-- **Persistencia**: Personal, no se comparten
+- **Uso**: Agentes que usas frecuentemente
 
-### 📁 Nivel Proyecto (`.claude/agents/`)
+### 📁 Vista Proyecto
+- **Ubicación**: `[proyecto]/.claude/agents/`
 - **Alcance**: Específicos del proyecto actual
 - **Uso**: Agentes especializados para el proyecto
-- **Persistencia**: Se pueden versionar con Git y compartir con el equipo
 
-### 🎯 Script Multi-Nivel
+## 🎯 Flujo de Trabajo Típico
+
+1. **Primera vez**:
+   ```bash
+   agent-manager
+   # Presiona '1' para Vista General
+   # Selecciona agentes con SPACE
+   # Guarda con 's'
+   ```
+
+2. **En un proyecto específico**:
+   ```bash
+   cd mi-proyecto
+   agent-manager
+   # Presiona '2' para Vista Proyecto
+   # Selecciona agentes específicos del proyecto
+   # Guarda con 's'
+   ```
+
+3. **Ver qué hace un agente**:
+   ```bash
+   agent-manager
+   # Navega al agente
+   # Presiona 'v' para ver su contenido
+   ```
+
+## 🗑️ Desinstalación
+
+Si necesitas desinstalar la herramienta:
 
 ```bash
-./copy-agents-multilevel.sh
+chmod +x uninstall.sh
+./uninstall.sh
 ```
 
-Este script detecta automáticamente:
-- El nivel de instalación deseado
-- La raíz del proyecto (si existe)
-- Crea `.gitignore` apropiado para proyectos
+**Nota**: La desinstalación preserva tus agentes instalados en `~/.claude/agents/`
 
-### Ejemplo de uso en equipo:
-```bash
-# En el proyecto, instalar agentes específicos
-./copy-agents-multilevel.sh  # Seleccionar opción 2 (Proyecto)
+## 📝 Características
 
-# Commitear para compartir con el equipo
-git add .claude/agents/
-git commit -m "Add project-specific Claude agents"
-git push
-```
+- ✅ **Interfaz intuitiva** con navegación natural (ESC, flechas)
+- ✅ **Vista dual** para gestión usuario/proyecto
+- ✅ **Confirmación visual** antes de aplicar cambios
+- ✅ **Código de colores** para cambios pendientes
+- ✅ **Visor integrado** para examinar agentes
+- ✅ **Detección automática** de proyectos Git
+- ✅ **Instalación global** disponible desde cualquier directorio
 
-## Ejemplos de Proyectos
-
-La carpeta `examples/` contiene configuraciones y documentación específica para diferentes tipos de proyectos, incluyendo guías de arquitectura y patrones de desarrollo.
-
-## Contribuir
+## 🤝 Contribuir
 
 Para añadir nuevos agentes:
 
 1. Crea el archivo `.md` en la carpeta apropiada dentro de `agents-collection/`
-2. Usa el formato estándar:
+2. Usa el formato estándar con frontmatter YAML:
    ```markdown
    ---
    name: nombre-del-agente
    description: Descripción breve del agente
-   color: color-para-ui
+   color: blue
+   model: claude-3-5-sonnet-20241022
    ---
    
-   # Nombre del Agente
+   # Instrucciones del agente
    
-   Descripción detallada y instrucciones...
+   Tu contenido aquí...
    ```
-3. Testa con el script interactivo
 
-## Licencia
+## 📄 Licencia
 
 Proyecto privado. Todos los derechos reservados.

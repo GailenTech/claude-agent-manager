@@ -18,7 +18,12 @@ class View(Enum):
 class AgentManager:
     def __init__(self):
         self.script_dir = Path(__file__).parent.absolute()
-        self.agents_collection = self.script_dir / "agents-collection"
+        # Use environment variable if set, otherwise use local directory
+        collection_path = os.environ.get('CLAUDE_AGENT_COLLECTION')
+        if collection_path:
+            self.agents_collection = Path(collection_path)
+        else:
+            self.agents_collection = self.script_dir / "agents-collection"
         self.user_agents = Path.home() / ".claude" / "agents"
         self.project_root = self.detect_project()
         self.project_agents = self.project_root / ".claude" / "agents" if self.project_root else None
