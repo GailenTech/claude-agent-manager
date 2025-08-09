@@ -24,13 +24,25 @@ Este proyecto proporciona una herramienta completa para organizar, instalar y ge
 
 ## Uso
 
-### 🌟 Gestor Unificado Interactivo
+### 🐍 Gestor Python con Curses (RECOMENDADO)
+
+```bash
+./agent-manager.py
+```
+
+**Ventajas**:
+- ✅ ESC y flechas funcionan perfectamente
+- ✅ Interfaz más robusta y fluida
+- ✅ Sin problemas de detección de teclas
+- ✅ Mejor manejo de errores
+
+### 🌟 Gestor Bash Interactivo
 
 ```bash
 ./agent-manager.sh
 ```
 
-**Nota**: Este script requiere un terminal interactivo. Ejecútalo directamente en tu terminal, no desde herramientas automatizadas.
+**Nota**: Usa 'b' para volver (ESC no es compatible con flechas en bash).
 
 Características principales:
 - 📊 **Vista de tres columnas**: Usuario | Proyecto | Disponibles
