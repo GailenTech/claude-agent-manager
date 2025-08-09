@@ -90,6 +90,7 @@ class AgentManager:
                         installed = (check_dir / f"{name}.md").exists()
                     
                     agent = {
+                        'type': 'agent',
                         'name': name,
                         'description': desc,
                         'category': category,
@@ -417,7 +418,7 @@ class AgentManager:
             # Space - toggle selection
             elif key == ord(' '):
                 if (self.current_index < len(self.flattened_agents) and 
-                    self.flattened_agents[self.current_index]['type'] != 'category'):
+                    self.flattened_agents[self.current_index]['type'] == 'agent'):
                     self.toggle_agent(self.flattened_agents[self.current_index])
             
             # View switching
@@ -446,7 +447,7 @@ class AgentManager:
             # View file
             elif key == ord('v') or key == ord('V'):
                 if (self.current_index < len(self.flattened_agents) and 
-                    self.flattened_agents[self.current_index]['type'] != 'category'):
+                    self.flattened_agents[self.current_index]['type'] == 'agent'):
                     self.view_agent_file(self.flattened_agents[self.current_index])
             
             # Save changes
