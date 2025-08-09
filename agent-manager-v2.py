@@ -247,7 +247,7 @@ class AgentManager:
                     color = curses.color_pair(1)  # Red
                     status_symbol = " -"
                 else:
-                    color = curses.color_pair(0)
+                    color = curses.color_pair(7)  # Normal
                     status_symbol = "  "
                 
                 # Build display string
@@ -375,13 +375,13 @@ class AgentManager:
         """Main UI loop"""
         # Setup colors
         curses.curs_set(0)  # Hide cursor
-        curses.init_pair(0, curses.COLOR_WHITE, curses.COLOR_BLACK)  # Normal
         curses.init_pair(1, curses.COLOR_RED, curses.COLOR_BLACK)    # Remove
         curses.init_pair(2, curses.COLOR_BLUE, curses.COLOR_BLACK)   # Headers
         curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Add
         curses.init_pair(4, curses.COLOR_YELLOW, curses.COLOR_BLACK) # Warning
         curses.init_pair(5, curses.COLOR_CYAN, curses.COLOR_BLACK)   # Category
         curses.init_pair(6, curses.COLOR_WHITE, curses.COLOR_BLACK)  # Dim
+        curses.init_pair(7, curses.COLOR_WHITE, curses.COLOR_BLACK)  # Normal
         
         while True:
             height, width = stdscr.getmaxyx()
