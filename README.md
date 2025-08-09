@@ -2,6 +2,8 @@
 
 Gestor de agentes especializados para Claude Code.
 
+![Claude Agent Manager Interface](docs/images/screenshot.png)
+
 ## Instalación
 
 ```bash
