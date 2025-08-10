@@ -27,6 +27,7 @@ class TreeNode:
         self.description = ""
         self.is_new = False
         self.agent_count = 0  # For folders
+        self.changes_summary = {'add': 0, 'remove': 0}  # Track changes in folder
         
     def get_display_name(self):
         """Get display name with folder indicators"""
@@ -74,6 +75,45 @@ class TreeNode:
             self.expanded = False
             for child in self.children:
                 child.collapse_all()
+    
+    def update_changes_summary(self, changes_dict):
+        """Update changes summary for this node and propagate to parents"""
+        if not self.is_folder:
+            return
+        
+        # Reset counters
+        self.changes_summary = {'add': 0, 'remove': 0}
+        
+        # Count changes in direct children and subfolders
+        for child in self.children:
+            if child.is_folder:
+                # Recursively update child folders first
+                child.update_changes_summary(changes_dict)
+                # Add child folder's changes to this folder
+                self.changes_summary['add'] += child.changes_summary['add']
+                self.changes_summary['remove'] += child.changes_summary['remove']
+            else:
+                # Check if this agent has changes
+                relative_path = str(child.path.relative_to(child.path.parent.parent.parent)) if child.path.parent.parent.parent.exists() else child.name
+                for key, change_type in changes_dict.items():
+                    if change_type and child.name in key:
+                        if change_type == 'add':
+                            self.changes_summary['add'] += 1
+                        elif change_type == 'remove':
+                            self.changes_summary['remove'] += 1
+    
+    def get_changes_display(self):
+        """Get formatted string for changes display"""
+        if not self.is_folder or (self.changes_summary['add'] == 0 and self.changes_summary['remove'] == 0):
+            return ""
+        
+        parts = []
+        if self.changes_summary['add'] > 0:
+            parts.append(f"+{self.changes_summary['add']}")
+        if self.changes_summary['remove'] > 0:
+            parts.append(f"-{self.changes_summary['remove']}")
+        
+        return f" [{' '.join(parts)}]" if parts else ""
 
 class AgentManagerTree:
     def __init__(self):
@@ -230,6 +270,14 @@ class AgentManagerTree:
             self.changes[key] = 'add'
         else:
             self.changes[key] = 'remove'
+        
+        # Update changes summary for all folders
+        self.update_all_changes_summary()
+    
+    def update_all_changes_summary(self):
+        """Update changes summary for entire tree"""
+        for child in self.tree_root.children:
+            child.update_changes_summary(self.changes)
     
     def get_changes_summary(self):
         """Get summary of pending changes"""
@@ -341,7 +389,10 @@ class AgentManagerTree:
                 else:
                     count_text = " (vacío)"
                 
-                line = f"{marker}{indent}{display_name}{count_text}"
+                # Add changes summary if any
+                changes_text = node.get_changes_display()
+                
+                line = f"{marker}{indent}{display_name}{count_text}{changes_text}"
                 
                 # Use different color for top-level folders
                 if node.level == 0:
@@ -349,7 +400,22 @@ class AgentManagerTree:
                 else:
                     color = curses.color_pair(6)
                 
-                stdscr.addstr(y, 0, line[:width-1], color | attr)
+                # Apply change colors to the changes part
+                if changes_text:
+                    base_line = f"{marker}{indent}{display_name}{count_text}"
+                    stdscr.addstr(y, 0, base_line[:width-len(changes_text)-1], color | attr)
+                    
+                    # Color the changes part
+                    if node.changes_summary['add'] > 0 and node.changes_summary['remove'] > 0:
+                        change_color = curses.color_pair(4)  # Yellow for mixed
+                    elif node.changes_summary['add'] > 0:
+                        change_color = curses.color_pair(3)  # Green for adds
+                    else:
+                        change_color = curses.color_pair(1)  # Red for removes
+                    
+                    stdscr.addstr(y, len(base_line), changes_text, change_color | attr)
+                else:
+                    stdscr.addstr(y, 0, line[:width-1], color | attr)
                 
             else:
                 # Agent display
@@ -510,11 +576,16 @@ class AgentManagerTree:
                                 self.current_index = i
                                 break
             
-            # Space - toggle selection
+            # Space - toggle selection or expand/collapse folder
             elif key == ord(' '):
                 if self.current_index < len(self.flattened_nodes):
                     node = self.flattened_nodes[self.current_index]
-                    if not node.is_folder:
+                    if node.is_folder:
+                        # Toggle expand/collapse for folders
+                        node.toggle_expand()
+                        self.flatten_tree()
+                    else:
+                        # Toggle selection for agents
                         self.toggle_selection(node)
             
             # Expand/collapse all
@@ -566,6 +637,11 @@ class AgentManagerTree:
                             self.current_state[key] = True
                             if self.current_state[key] != self.original_state[key]:
                                 self.changes[key] = 'add'
+                            else:
+                                self.changes[key] = None
+                    
+                    # Update changes summary
+                    self.update_all_changes_summary()
             
             # Deselect all in current folder
             elif key == ord('n') or key == ord('N'):
@@ -580,6 +656,11 @@ class AgentManagerTree:
                             self.current_state[key] = False
                             if self.current_state[key] != self.original_state[key]:
                                 self.changes[key] = 'remove'
+                            else:
+                                self.changes[key] = None
+                    
+                    # Update changes summary
+                    self.update_all_changes_summary()
             
             # Quit
             elif key == ord('q') or key == ord('Q'):
