@@ -417,6 +417,9 @@ class AgentManagerTree:
         self.sources_status_messages = []
         self.sync_in_progress = False
         
+        # Check for auto-sync on startup
+        self.check_auto_sync_on_startup()
+        
         self.build_tree()
         self.load_installation_state()
         self.flatten_tree()
@@ -671,6 +674,11 @@ class AgentManagerTree:
             if removes:
                 changes_text += f"-{len(removes)}"
             stdscr.addstr(4, 2, changes_text, curses.color_pair(4) | curses.A_BOLD)
+        
+        # Show sync status if in progress
+        if self.sync_in_progress:
+            sync_text = "🔄 Sincronizando fuentes..."
+            stdscr.addstr(4, width - len(sync_text) - 2, sync_text, curses.color_pair(4))
     
     def draw_tree(self, stdscr, height, width):
         """Draw tree with proper indentation"""
@@ -1189,6 +1197,77 @@ class AgentManagerTree:
         """Handle save action in sources view (sync all)"""
         if not self.sync_in_progress:
             self.sync_sources_async()
+    
+    def check_auto_sync_on_startup(self):
+        """Check if auto-sync is needed on startup"""
+        if not self.sources_manager.config.auto_sync:
+            return
+        
+        now = datetime.now()
+        last_sync = self.sources_manager.config.last_auto_sync
+        
+        should_sync = False
+        
+        if last_sync is None:
+            # Never synced before
+            should_sync = True
+        else:
+            try:
+                last_sync_time = datetime.fromisoformat(last_sync.replace('Z', '+00:00')).replace(tzinfo=None)
+                time_since_sync = now - last_sync_time
+                
+                if time_since_sync.total_seconds() > self.sources_manager.config.sync_interval:
+                    should_sync = True
+            except (ValueError, TypeError):
+                # Invalid date format, sync to be safe
+                should_sync = True
+        
+        if should_sync:
+            self.sync_sources_startup_async()
+    
+    def sync_sources_startup_async(self):
+        """Sync sources on startup in background"""
+        def startup_sync_thread():
+            self.sync_in_progress = True
+            
+            # Only sync if sources have content that needs updating
+            enabled_sources = self.sources_manager.get_enabled_sources()
+            if not enabled_sources:
+                self.sync_in_progress = False
+                return
+            
+            # Check if we have cached data first - if not, definitely sync
+            needs_sync = False
+            for source in enabled_sources:
+                cache_path = self.sources_manager.get_source_cache_path(source.id)
+                if not cache_path.exists():
+                    needs_sync = True
+                    break
+            
+            if needs_sync or True:  # Always sync on startup for now
+                results = self.sources_manager.sync_all_sources()
+                success_count = sum(1 for success in results.values() if success)
+                
+                if success_count > 0:
+                    # Update last sync time
+                    self.sources_manager.config.last_auto_sync = datetime.now().isoformat()
+                    self.sources_manager.save_config()
+                    
+                    # Refresh collection if sync was successful
+                    try:
+                        new_collection = self.sources_manager.get_merged_agents_collection()
+                        if new_collection.exists():
+                            self.agents_collection = new_collection
+                            # Note: We don't rebuild tree here to avoid UI disruption
+                            # Tree will use new collection on next restart or manual refresh
+                    except:
+                        pass  # Silently fail to avoid startup disruption
+            
+            self.sync_in_progress = False
+        
+        # Run sync in background thread to not block UI startup
+        thread = threading.Thread(target=startup_sync_thread, daemon=True)
+        thread.start()
 
 def main():
     try:

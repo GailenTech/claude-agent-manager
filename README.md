@@ -104,9 +104,18 @@ El Agent Manager incluye un sistema de fuentes extensible que permite:
 - **Local**: Directorios en el sistema de archivos local
 - **HTTP**: URLs de archivos ZIP/tar.gz (próximamente)
 
+#### Sincronización automática
+- **Al inicio**: Comprueba si han pasado más de 24 horas desde la última sincronización
+- **Primera vez**: Si nunca se ha sincronizado, descarga automáticamente en segundo plano
+- **Intervalo configurable**: Por defecto cada 24 horas (86400 segundos)
+- **No bloquea la UI**: La sincronización ocurre en segundo plano
+- **Indicador visual**: Muestra "🔄 Sincronizando fuentes..." cuando está en proceso
+
 #### Configuración persistente
-- Config: `~/.config/claude-agent-manager/sources.json`
-- Cache: `~/.cache/claude-agent-manager/sources/`
+- **Config**: `~/.config/claude-agent-manager/sources.json`
+- **Cache**: `~/.cache/claude-agent-manager/sources/`
+- **Auto-sync**: Se puede desactivar poniendo `"auto_sync": false` en el config
+- **Intervalo personalizable**: Cambiar `"sync_interval"` (en segundos)
 - Cada fuente tiene su propia carpeta de cache con actualizaciones incrementales
 
 ## Desinstalar
