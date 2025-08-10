@@ -208,6 +208,9 @@ class AgentManagerTree:
         
         # Mark installed agents in tree
         self._mark_installed_recursive(self.tree_root, installed_files)
+        
+        # Reset all change summaries when switching views
+        self._reset_all_changes_summary(self.tree_root)
     
     def _mark_installed_recursive(self, node, installed_files):
         """Recursively mark installed agents"""
@@ -223,6 +226,13 @@ class AgentManagerTree:
         else:
             for child in node.children:
                 self._mark_installed_recursive(child, installed_files)
+    
+    def _reset_all_changes_summary(self, node):
+        """Reset change summaries for all folders"""
+        if node.is_folder:
+            node.changes_summary = {'add': 0, 'remove': 0}
+            for child in node.children:
+                self._reset_all_changes_summary(child)
     
     def flatten_tree(self):
         """Flatten tree to list for display, respecting expansion state"""
@@ -316,18 +326,41 @@ class AgentManagerTree:
         curses.doupdate()
     
     def draw_header(self, stdscr, height, width):
-        """Draw header with view indicator"""
-        view_text = "Vista General (Usuario)" if self.current_view == View.GENERAL else f"Vista Proyecto: {self.project_root.name}"
+        """Draw header with view indicator and path"""
+        # Choose color based on view
+        if self.current_view == View.GENERAL:
+            header_color = curses.color_pair(2)  # Blue for General
+            view_text = "Vista General (Usuario)"
+            target_path = str(self.user_agents)
+        else:
+            header_color = curses.color_pair(3)  # Green for Project
+            view_text = f"Vista Proyecto: {self.project_root.name}"
+            target_path = str(self.project_agents)
         
-        stdscr.addstr(0, 0, "╔" + "═" * (width-2) + "╗", curses.color_pair(2) | curses.A_BOLD)
-        stdscr.addstr(1, 0, "║", curses.color_pair(2) | curses.A_BOLD)
-        stdscr.addstr(1, width-1, "║", curses.color_pair(2) | curses.A_BOLD)
+        # Truncate path if needed
+        max_path_len = width - 10
+        if len(target_path) > max_path_len:
+            display_path = "..." + target_path[-(max_path_len-3):]
+        else:
+            display_path = target_path
+        
+        stdscr.addstr(0, 0, "╔" + "═" * (width-2) + "╗", header_color | curses.A_BOLD)
+        stdscr.addstr(1, 0, "║", header_color | curses.A_BOLD)
+        stdscr.addstr(1, width-1, "║", header_color | curses.A_BOLD)
         
         title = f"Claude Agent Manager - {view_text}"
         title_x = (width - len(title)) // 2
-        stdscr.addstr(1, title_x, title, curses.color_pair(2) | curses.A_BOLD)
+        stdscr.addstr(1, title_x, title, header_color | curses.A_BOLD)
         
-        stdscr.addstr(2, 0, "╚" + "═" * (width-2) + "╝", curses.color_pair(2) | curses.A_BOLD)
+        stdscr.addstr(2, 0, "║", header_color | curses.A_BOLD)
+        stdscr.addstr(2, width-1, "║", header_color | curses.A_BOLD)
+        
+        # Show path on second line
+        path_x = (width - len(display_path)) // 2
+        stdscr.addstr(2, path_x, display_path, header_color)
+        
+        stdscr.addstr(3, 0, "╚" + "═" * (width-2) + "╝", header_color | curses.A_BOLD)
+        
         
         adds, removes = self.get_changes_summary()
         if adds or removes:
@@ -336,11 +369,11 @@ class AgentManagerTree:
                 changes_text += f"+{len(adds)} "
             if removes:
                 changes_text += f"-{len(removes)}"
-            stdscr.addstr(3, 2, changes_text, curses.color_pair(4) | curses.A_BOLD)
+            stdscr.addstr(4, 2, changes_text, curses.color_pair(4) | curses.A_BOLD)
     
     def draw_tree(self, stdscr, height, width):
         """Draw tree with proper indentation"""
-        start_y = 5
+        start_y = 6
         visible_height = height - 8
         
         # Calculate visible range
@@ -592,6 +625,8 @@ class AgentManagerTree:
                     self.current_index = 0
                     self.load_installation_state()
                     self.flatten_tree()
+                    # Force update of changes summary after view switch
+                    self.update_all_changes_summary()
             
             elif key == ord('2'):
                 if self.current_view != View.GENERAL:
@@ -599,6 +634,8 @@ class AgentManagerTree:
                     self.current_index = 0
                     self.load_installation_state()
                     self.flatten_tree()
+                    # Force update of changes summary after view switch
+                    self.update_all_changes_summary()
             
             # View file
             elif key == ord('v') or key == ord('V'):
