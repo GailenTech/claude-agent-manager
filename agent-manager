@@ -268,22 +268,193 @@ class SourcesManager:
     
     def get_merged_agents_collection(self) -> Path:
         """Get a merged view of all enabled sources"""
-        # For now, return the highest priority source
-        # TODO: Implement proper merging with conflict resolution
+        merged_path = self.cache_dir / "_merged"
+        
+        # Check if merge is up to date
+        if self._is_merge_current(merged_path):
+            return merged_path
+        
+        # Create fresh merged collection
+        return self._create_merged_collection(merged_path)
+    
+    def _is_merge_current(self, merged_path: Path) -> bool:
+        """Check if merged collection is current"""
+        if not merged_path.exists():
+            return False
+        
+        merge_time = merged_path.stat().st_mtime
+        
+        # Check if any source is newer than the merge
+        for source in self.get_enabled_sources():
+            cache_path = self.get_source_cache_path(source.id)
+            if cache_path.exists():
+                if cache_path.stat().st_mtime > merge_time:
+                    return False
+        
+        return True
+    
+    def _create_merged_collection(self, merged_path: Path) -> Path:
+        """Create merged collection from all enabled sources"""
+        if merged_path.exists():
+            shutil.rmtree(merged_path)
+        
+        merged_path.mkdir(parents=True, exist_ok=True)
+        
+        # Track agents across sources for conflict resolution
+        agent_registry = {}  # agent_name -> [(source_info, file_path), ...]
+        
+        # Process all enabled sources by priority (highest first)
         sources = self.get_enabled_sources()
-        if not sources:
-            return Path("agents-collection")  # Fallback to embedded
         
-        highest_priority = sources[0]
-        cache_path = self.get_source_cache_path(highest_priority.id)
+        for source in sources:
+            cache_path = self.get_source_cache_path(source.id)
+            source_agents_path = cache_path / source.path
+            
+            if not source_agents_path.exists():
+                continue
+            
+            # Traverse source directory structure
+            self._process_source_directory(
+                source_agents_path, 
+                source, 
+                agent_registry, 
+                merged_path,
+                base_path=source_agents_path
+            )
         
-        if cache_path.exists():
-            agents_path = cache_path / highest_priority.path
-            if agents_path.exists():
-                return agents_path
+        # Create merged directory structure and resolve conflicts
+        self._build_merged_structure(agent_registry, merged_path)
         
-        # Fallback to embedded collection
-        return Path("agents-collection")
+        return merged_path
+    
+    def _process_source_directory(self, source_dir: Path, source: AgentSource, 
+                                  agent_registry: dict, merged_path: Path, 
+                                  base_path: Path):
+        """Process a source directory recursively"""
+        if not source_dir.exists():
+            return
+        
+        for item in source_dir.rglob("*.md"):
+            # Calculate relative path from base
+            try:
+                rel_path = item.relative_to(base_path)
+                category = str(rel_path.parent) if rel_path.parent != Path('.') else 'root'
+                agent_name = item.stem
+                
+                # Create unique key for conflict resolution
+                full_key = f"{category}/{agent_name}"
+                
+                if full_key not in agent_registry:
+                    agent_registry[full_key] = []
+                
+                agent_registry[full_key].append({
+                    'source': source,
+                    'file_path': item,
+                    'category': category,
+                    'agent_name': agent_name,
+                    'rel_path': rel_path
+                })
+                
+            except ValueError:
+                # Skip files outside base path
+                continue
+    
+    def _build_merged_structure(self, agent_registry: dict, merged_path: Path):
+        """Build the final merged directory structure"""
+        for full_key, agent_variants in agent_registry.items():
+            category, agent_name = full_key.split('/', 1)
+            
+            # Create category directory
+            if category == 'root':
+                category_path = merged_path
+            else:
+                category_path = merged_path / category
+                category_path.mkdir(parents=True, exist_ok=True)
+            
+            if len(agent_variants) == 1:
+                # No conflict - direct copy
+                variant = agent_variants[0]
+                dest_file = category_path / f"{agent_name}.md"
+                shutil.copy2(variant['file_path'], dest_file)
+                
+                # Add source attribution
+                self._add_source_attribution(dest_file, variant['source'])
+            else:
+                # Conflict resolution - create variants with source suffix
+                for i, variant in enumerate(sorted(agent_variants, key=lambda x: x['source'].priority, reverse=True)):
+                    if i == 0:
+                        # Highest priority gets original name
+                        dest_file = category_path / f"{agent_name}.md"
+                    else:
+                        # Lower priority gets source suffix
+                        source_suffix = self._get_source_suffix(variant['source'])
+                        dest_file = category_path / f"{agent_name}-{source_suffix}.md"
+                    
+                    shutil.copy2(variant['file_path'], dest_file)
+                    self._add_source_attribution(dest_file, variant['source'])
+        
+        # Create a metadata file for the merge
+        self._create_merge_metadata(merged_path, agent_registry)
+    
+    def _get_source_suffix(self, source: AgentSource) -> str:
+        """Get a short suffix for source identification"""
+        # Use source ID, but make it shorter and cleaner
+        suffix = source.id.replace('-', '')[:8]
+        return suffix
+    
+    def _add_source_attribution(self, file_path: Path, source: AgentSource):
+        """Add source attribution to agent file"""
+        try:
+            content = file_path.read_text()
+            
+            # Add source info after YAML frontmatter if not already present
+            if '<!-- Source:' not in content:
+                lines = content.split('\n')
+                
+                # Find end of YAML frontmatter
+                yaml_end = -1
+                if lines and lines[0] == '---':
+                    for i, line in enumerate(lines[1:], 1):
+                        if line == '---':
+                            yaml_end = i
+                            break
+                
+                # Insert source attribution after YAML
+                if yaml_end > 0:
+                    attribution = f"\n<!-- Source: {source.name} ({source.url}) -->\n"
+                    lines.insert(yaml_end + 1, attribution)
+                    file_path.write_text('\n'.join(lines))
+                    
+        except Exception:
+            # If we can't add attribution, continue anyway
+            pass
+    
+    def _create_merge_metadata(self, merged_path: Path, agent_registry: dict):
+        """Create metadata file about the merge"""
+        metadata = {
+            'merge_time': datetime.now().isoformat(),
+            'sources_used': [],
+            'conflicts_resolved': 0,
+            'total_agents': len(agent_registry)
+        }
+        
+        # Count sources and conflicts
+        sources_seen = set()
+        conflicts = 0
+        
+        for agents_variants in agent_registry.values():
+            if len(agents_variants) > 1:
+                conflicts += 1
+            for variant in agents_variants:
+                sources_seen.add(variant['source'].id)
+        
+        metadata['conflicts_resolved'] = conflicts
+        metadata['sources_used'] = list(sources_seen)
+        
+        # Write metadata
+        metadata_file = merged_path / '.merge_info.json'
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
     
     def sync_all_sources(self, progress_callback=None) -> Dict[str, bool]:
         """Sync all enabled sources"""
@@ -416,6 +587,10 @@ class AgentManagerTree:
         self.sources_index = 0
         self.sources_status_messages = []
         self.sync_in_progress = False
+        
+        # Add source form state
+        self.add_form_fields = {}
+        self.add_form_current_field = 0
         
         # Check for auto-sync on startup
         self.check_auto_sync_on_startup()
@@ -880,6 +1055,8 @@ class AgentManagerTree:
             if self.current_view == View.SOURCES:
                 self.draw_sources_view(stdscr, height, width)
                 self.draw_sources_instructions(stdscr, height, width)
+            elif self.current_view == "ADD_SOURCE":
+                self.draw_add_source_form(stdscr, height, width)
             else:
                 self.draw_tree(stdscr, height, width)
                 self.draw_instructions(stdscr, height, width)
@@ -892,6 +1069,8 @@ class AgentManagerTree:
             if key == curses.KEY_UP:
                 if self.current_view == View.SOURCES:
                     self.handle_sources_navigation(key)
+                elif self.current_view == "ADD_SOURCE":
+                    self.handle_add_form_navigation(key)
                 else:
                     if self.current_index > 0:
                         self.current_index -= 1
@@ -899,6 +1078,8 @@ class AgentManagerTree:
             elif key == curses.KEY_DOWN:
                 if self.current_view == View.SOURCES:
                     self.handle_sources_navigation(key)
+                elif self.current_view == "ADD_SOURCE":
+                    self.handle_add_form_navigation(key)
                 else:
                     if self.current_index < len(self.flattened_nodes) - 1:
                         self.current_index += 1
@@ -1038,9 +1219,22 @@ class AgentManagerTree:
                 if self.current_view == View.SOURCES:
                     self.current_view = View.GENERAL
                     self.current_index = 0
+                elif self.current_view == "ADD_SOURCE":
+                    self.current_view = View.SOURCES
+                    self.sources_status_messages.append("✗ Add source cancelled")
                 else:
                     self.load_installation_state()
                     self.flatten_tree()
+            
+            # Handle ADD_SOURCE form keys
+            elif self.current_view == "ADD_SOURCE":
+                if key == ord('\n'):  # Submit form
+                    if self.process_add_source_form():
+                        self.current_view = View.SOURCES
+                elif 32 <= key <= 126:  # Typing
+                    self.handle_add_form_typing(chr(key))
+                elif key == curses.KEY_BACKSPACE or key == 127:
+                    self.handle_add_form_backspace()
     
     def draw_sources_view(self, stdscr, height, width):
         """Draw the sources management view"""
@@ -1136,8 +1330,9 @@ class AgentManagerTree:
                     status = "enabled" if new_state else "disabled"
                     self.sources_status_messages.append(f"Source '{source.name}' {status}")
         elif key == ord('a') or key == ord('A'):
-            # Add new source (placeholder)
-            self.sources_status_messages.append("Add source: Feature coming soon")
+            # Add new source - switch to form view
+            self.current_view = "ADD_SOURCE"
+            self.init_add_source_form()
         elif key == ord('d') or key == ord('D'):
             # Delete source
             if self.sources_index < sources_count:
@@ -1267,6 +1462,478 @@ class AgentManagerTree:
         
         # Run sync in background thread to not block UI startup
         thread = threading.Thread(target=startup_sync_thread, daemon=True)
+        thread.start()
+    
+    def init_add_source_form(self):
+        \"\"\"Initialize add source form\"\"\"
+        self.add_form_fields = {
+            'url': '',
+            'name': '',
+            'priority': '50',
+            'path': 'agents-collection',
+            'type': 'git'
+        }
+        self.add_form_current_field = 0
+    
+    def handle_add_form_navigation(self, key):
+        \"\"\"Handle navigation in add form\"\"\"
+        field_count = 5  # url, name, type, priority, path
+        
+        if key == curses.KEY_UP:
+            self.add_form_current_field = max(0, self.add_form_current_field - 1)
+        elif key == curses.KEY_DOWN:
+            self.add_form_current_field = min(field_count - 1, self.add_form_current_field + 1)
+    
+    def handle_add_form_typing(self, char):
+        \"\"\"Handle typing in form fields\"\"\"
+        field_names = ['url', 'name', 'type', 'priority', 'path']
+        field_name = field_names[self.add_form_current_field]
+        self.add_form_fields[field_name] += char
+    
+    def handle_add_form_backspace(self):
+        \"\"\"Handle backspace in form fields\"\"\"
+        field_names = ['url', 'name', 'type', 'priority', 'path']
+        field_name = field_names[self.add_form_current_field]
+        if self.add_form_fields[field_name]:
+            self.add_form_fields[field_name] = self.add_form_fields[field_name][:-1]
+    
+    def draw_add_source_form(self, stdscr, height, width):
+        \"\"\"Draw simplified add source form\"\"\"
+        # Header
+        title = \" Add New Agent Source \"
+        header_color = curses.color_pair(5)
+        
+        stdscr.addstr(0, 0, \"╔\" + \"═\" * (width-2) + \"╗\", header_color | curses.A_BOLD)
+        stdscr.addstr(1, 0, \"║\", header_color | curses.A_BOLD)
+        stdscr.addstr(1, width-1, \"║\", header_color | curses.A_BOLD)
+        stdscr.addstr(1, (width - len(title)) // 2, title, header_color | curses.A_BOLD)
+        stdscr.addstr(2, 0, \"╚\" + \"═\" * (width-2) + \"╝\", header_color | curses.A_BOLD)
+        
+        # Form fields
+        start_y = 4
+        field_names = ['url', 'name', 'type', 'priority', 'path']
+        field_labels = [
+            'URL (Git repo or local path):',
+            'Name (display name):',
+            'Type (git/local):',
+            'Priority (0-100):',
+            'Path (subdirectory):'
+        ]
+        
+        for i, (field_name, label) in enumerate(zip(field_names, field_labels)):
+            y = start_y + i * 2
+            
+            # Field label
+            stdscr.addstr(y, 2, label, curses.A_BOLD)
+            
+            # Field value
+            field_value = self.add_form_fields.get(field_name, '')
+            max_width = width - 6
+            display_value = field_value[:max_width]
+            
+            # Highlight current field
+            if i == self.add_form_current_field:
+                attr = curses.color_pair(1) | curses.A_REVERSE
+            else:
+                attr = curses.color_pair(6)
+            
+            # Draw field with cursor if active
+            cursor_char = '█' if i == self.add_form_current_field else ' '
+            field_display = f\"{display_value}{cursor_char}\"[:max_width]
+            stdscr.addstr(y + 1, 4, field_display, attr)
+        
+        # Examples
+        help_y = start_y + len(field_names) * 2 + 1
+        if help_y < height - 4:
+            stdscr.addstr(help_y, 2, \"Examples:\", curses.A_BOLD)
+            stdscr.addstr(help_y + 1, 2, \"https://github.com/awesome-agents/collection.git\", curses.color_pair(6))
+            stdscr.addstr(help_y + 2, 2, \"/local/path/to/agents\", curses.color_pair(6))
+        
+        # Instructions
+        instructions = \"[↑/↓] Navigate  [Type] Edit  [ENTER] Submit  [ESC] Cancel\"
+        stdscr.addstr(height - 2, 2, instructions[:width-4], curses.color_pair(6))
+    
+    def process_add_source_form(self):
+        \"\"\"Process add source form with validation\"\"\"
+        # Basic validation
+        if not self.add_form_fields['url'].strip():
+            self.sources_status_messages.append(\"✗ URL is required\")
+            return False
+        
+        if not self.add_form_fields['name'].strip():
+            self.sources_status_messages.append(\"✗ Name is required\")
+            return False
+        
+        # Prepare source data
+        try:
+            priority = int(self.add_form_fields['priority']) if self.add_form_fields['priority'].isdigit() else 50
+        except:
+            priority = 50
+        
+        source_data = {
+            'url': self.add_form_fields['url'].strip(),
+            'name': self.add_form_fields['name'].strip(),
+            'type': self.add_form_fields['type'].strip() or 'git',
+            'priority': priority,
+            'path': self.add_form_fields['path'].strip() or 'agents-collection'
+        }
+        
+        # Validate
+        validation_result = self.validate_source_data(source_data)
+        
+        if validation_result.get('valid', False):
+            new_source = AgentSource(
+                id=self.generate_source_id(source_data['name']),
+                name=source_data['name'],
+                url=source_data['url'],
+                path=source_data['path'],
+                priority=source_data['priority'],
+                source_type=source_data['type'],
+                enabled=True,
+                readonly=True
+            )
+            
+            if self.sources_manager.add_source(new_source):
+                self.sources_status_messages.append(f\"✓ Added source '{new_source.name}'\")
+                
+                # Auto-sync new source
+                if self.confirm_immediate_sync(new_source.name):
+                    self.sync_source_immediate(new_source.id)
+                
+                return True
+            else:
+                self.sources_status_messages.append(\"✗ Failed to add source (ID conflict)\")
+        else:
+            # Show validation errors
+            for error in validation_result.get('errors', []):
+                self.sources_status_messages.append(f\"✗ {error}\")
+        
+        return False
+    
+    def show_add_source_dialog(self):
+        """Show curses-based dialog to add new source"""
+        # Store current screen state
+        old_view = self.current_view
+        self.current_view = "ADD_SOURCE"
+        
+        # Form fields with defaults
+        fields = {
+            'url': '',
+            'name': '',
+            'priority': '50',
+            'path': 'agents-collection',
+            'type': 'git'
+        }
+        
+        field_order = ['url', 'name', 'type', 'priority', 'path']
+        current_field = 0
+        
+        while True:
+            # Draw the form
+            try:
+                height, width = curses.stdscr.getmaxyx()
+                curses.stdscr.clear()
+                
+                self.draw_add_source_form(curses.stdscr, height, width, fields, field_order, current_field)
+                curses.stdscr.refresh()
+                
+                key = curses.stdscr.getch()
+                
+                # Navigation
+                if key == curses.KEY_UP:
+                    current_field = max(0, current_field - 1)
+                elif key == curses.KEY_DOWN or key == ord('\t'):
+                    current_field = min(len(field_order) - 1, current_field + 1)
+                
+                # Form submission
+                elif key == ord('\n'):  # Enter
+                    if self.process_add_source_form(fields):
+                        break
+                
+                # Cancel
+                elif key == 27 or key == ord('q'):  # ESC or 'q'
+                    self.sources_status_messages.append("✗ Add source cancelled")
+                    break
+                
+                # Edit current field
+                elif key == ord(' ') or key == curses.KEY_RIGHT:
+                    self.edit_form_field(curses.stdscr, height, width, fields, field_order[current_field])
+                
+                # Backspace/Delete
+                elif key == curses.KEY_BACKSPACE or key == 127:
+                    field_name = field_order[current_field]
+                    if fields[field_name]:
+                        fields[field_name] = fields[field_name][:-1]
+                
+                # Type characters
+                elif 32 <= key <= 126:  # Printable characters
+                    field_name = field_order[current_field]
+                    fields[field_name] += chr(key)
+                    
+            except Exception as e:
+                self.sources_status_messages.append(f"✗ Form error: {e}")
+                break
+        
+        # Restore view
+        self.current_view = old_view
+    
+    def draw_add_source_form(self, stdscr, height, width, fields, field_order, current_field):
+        """Draw the add source form"""
+        # Header
+        title = " Add New Agent Source "
+        header_color = curses.color_pair(5)
+        
+        stdscr.addstr(0, 0, "╔" + "═" * (width-2) + "╗", header_color | curses.A_BOLD)
+        stdscr.addstr(1, 0, "║", header_color | curses.A_BOLD)
+        stdscr.addstr(1, width-1, "║", header_color | curses.A_BOLD)
+        stdscr.addstr(1, (width - len(title)) // 2, title, header_color | curses.A_BOLD)
+        stdscr.addstr(2, 0, "╚" + "═" * (width-2) + "╝", header_color | curses.A_BOLD)
+        
+        # Form fields
+        start_y = 4
+        
+        field_labels = {
+            'url': 'URL (Git repo or local path)',
+            'name': 'Name (display name)',
+            'type': 'Type (git/local)',
+            'priority': 'Priority (0-100)',
+            'path': 'Path (subdirectory in source)'
+        }
+        
+        for i, field_name in enumerate(field_order):
+            y = start_y + i * 3
+            
+            # Field label
+            label = field_labels[field_name]
+            stdscr.addstr(y, 2, f"{label}:", curses.A_BOLD)
+            
+            # Field value box
+            field_width = min(60, width - 6)
+            field_value = fields[field_name][:field_width-2]  # Truncate if too long
+            
+            # Highlight current field
+            if i == current_field:
+                box_attr = curses.color_pair(1) | curses.A_BOLD
+                value_attr = curses.color_pair(1) | curses.A_REVERSE
+            else:
+                box_attr = curses.color_pair(6)
+                value_attr = curses.color_pair(6)
+            
+            # Draw field box
+            stdscr.addstr(y + 1, 2, "┌" + "─" * (field_width-2) + "┐", box_attr)
+            stdscr.addstr(y + 2, 2, "└" + "─" * (field_width-2) + "┘", box_attr)
+            
+            # Field value with padding
+            display_value = field_value.ljust(field_width-4)
+            stdscr.addstr(y + 1, 3, "│", box_attr)
+            stdscr.addstr(y + 1, 4, display_value[:field_width-6], value_attr)
+            stdscr.addstr(y + 1, field_width-1, "│", box_attr)
+        
+        # Examples and help
+        help_y = start_y + len(field_order) * 3 + 1
+        if help_y < height - 6:
+            stdscr.addstr(help_y, 2, "Examples:", curses.A_BOLD)
+            stdscr.addstr(help_y + 1, 2, "URL: https://github.com/awesome-agents/collection.git", curses.color_pair(6))
+            stdscr.addstr(help_y + 2, 2, "URL: /local/path/to/agents (for local directories)", curses.color_pair(6))
+        
+        # Instructions
+        instructions = "[↑/↓] Navigate  [SPACE/→] Edit  [ENTER] Submit  [ESC/q] Cancel"
+        if len(instructions) < width:
+            stdscr.addstr(height - 2, 2, instructions, curses.color_pair(6))
+    
+    def edit_form_field(self, stdscr, height, width, fields, field_name):
+        """Edit a form field with inline editing"""
+        # This method allows for more sophisticated editing if needed
+        # For now, we'll just handle it in the main loop
+        pass
+    
+    def process_add_source_form(self, fields):
+        """Process and validate the add source form"""
+        # Basic validation
+        if not fields['url'].strip():
+            self.sources_status_messages.append("✗ URL is required")
+            return False
+        
+        if not fields['name'].strip():
+            self.sources_status_messages.append("✗ Name is required")  
+            return False
+        
+        # Prepare source data
+        source_data = {
+            'url': fields['url'].strip(),
+            'name': fields['name'].strip(),
+            'type': fields['type'].strip() or 'git',
+            'priority': int(fields['priority']) if fields['priority'].isdigit() else 50,
+            'path': fields['path'].strip() or 'agents-collection'
+        }
+        
+        # Validate
+        validation_result = self.validate_source_data(source_data)
+        
+        if validation_result.get('valid', False):
+            new_source = AgentSource(
+                id=self.generate_source_id(source_data['name']),
+                name=source_data['name'],
+                url=source_data['url'],
+                path=source_data['path'],
+                priority=source_data['priority'],
+                source_type=source_data['type'],
+                enabled=True,
+                readonly=True
+            )
+            
+            if self.sources_manager.add_source(new_source):
+                self.sources_status_messages.append(f"✓ Added source '{new_source.name}'")
+                
+                # Auto-sync new source
+                if self.confirm_immediate_sync(new_source.name):
+                    self.sync_source_immediate(new_source.id)
+                
+                return True
+            else:
+                self.sources_status_messages.append(f"✗ Failed to add source (ID conflict)")
+        else:
+            # Show validation errors
+            for error in validation_result.get('errors', []):
+                self.sources_status_messages.append(f"✗ {error}")
+        
+        return False
+    
+    def parse_source_input(self, content: str) -> dict:
+        """Parse source input from editor"""
+        data = {}
+        
+        for line in content.split('\n'):
+            line = line.strip()
+            if line.startswith('#') or not line:
+                continue
+            
+            if ':' in line:
+                key, value = line.split(':', 1)
+                key = key.strip().lower()
+                value = value.strip()
+                
+                if value:  # Only add non-empty values
+                    if key == 'priority':
+                        try:
+                            data[key] = int(value)
+                        except ValueError:
+                            data[key] = 50  # default
+                    else:
+                        data[key] = value
+        
+        return data
+    
+    def validate_source_data(self, data: dict) -> dict:
+        """Validate source data with comprehensive checks"""
+        errors = []
+        
+        # Required fields
+        if not data.get('url'):
+            errors.append("URL is required")
+        if not data.get('name'):
+            errors.append("Name is required")
+        
+        # URL validation
+        url = data.get('url', '')
+        if url:
+            if data.get('type', 'git') == 'git':
+                # Git URL validation
+                if not (url.startswith(('https://', 'http://', 'git@', 'ssh://'))
+                        or url.endswith('.git')):
+                    errors.append("Git URL should start with https://, http://, git@, ssh:// or end with .git")
+                
+                # Check for common Git hosting patterns
+                if 'github.com' in url or 'gitlab.com' in url or 'bitbucket.org' in url:
+                    if not (url.startswith('https://') or url.startswith('git@')):
+                        errors.append("Use https:// or git@ for GitHub/GitLab/Bitbucket URLs")
+            
+            elif data.get('type') == 'local':
+                # Local path validation
+                local_path = Path(url)
+                if not local_path.exists():
+                    errors.append(f"Local path does not exist: {url}")
+                elif not local_path.is_dir():
+                    errors.append(f"Local path is not a directory: {url}")
+        
+        # Priority validation
+        priority = data.get('priority', 50)
+        if not isinstance(priority, int) or priority < 0 or priority > 100:
+            errors.append("Priority must be between 0 and 100")
+        
+        # Name uniqueness check
+        name = data.get('name', '')
+        if name:
+            existing_names = [s.name for s in self.sources_manager.config.sources]
+            if name in existing_names:
+                errors.append(f"Source name '{name}' already exists")
+        
+        # URL uniqueness check  
+        if url:
+            existing_urls = [s.url for s in self.sources_manager.config.sources]
+            if url in existing_urls:
+                errors.append(f"Source URL already exists in another source")
+        
+        # Path validation
+        path = data.get('path', 'agents-collection')
+        if path.startswith('/') or '..' in path:
+            errors.append("Path should be relative and not contain '..'")
+        
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors
+        }
+    
+    def generate_source_id(self, name: str) -> str:
+        """Generate unique source ID from name"""
+        import re
+        
+        # Convert to lowercase, replace spaces/special chars with dashes
+        base_id = re.sub(r'[^a-z0-9-]', '-', name.lower())
+        base_id = re.sub(r'-+', '-', base_id).strip('-')
+        
+        # Ensure uniqueness
+        existing_ids = [s.id for s in self.sources_manager.config.sources]
+        
+        if base_id not in existing_ids:
+            return base_id
+        
+        # Add number suffix if needed
+        counter = 1
+        while f"{base_id}-{counter}" in existing_ids:
+            counter += 1
+        
+        return f"{base_id}-{counter}"
+    
+    def confirm_immediate_sync(self, source_name: str) -> bool:
+        """Ask user if they want to sync the new source immediately"""
+        # Simple confirmation - in a real implementation this could be a dialog
+        # For now, we'll always return True (auto-sync new sources)
+        return True
+    
+    def sync_source_immediate(self, source_id: str):
+        """Sync a specific source immediately"""
+        def sync_thread():
+            self.sources_status_messages.append(f"Syncing new source...")
+            success = self.sources_manager.sync_source(
+                source_id,
+                lambda msg: self.sources_status_messages.append(msg)
+            )
+            
+            if success:
+                # Refresh collection if sync was successful
+                try:
+                    new_collection = self.sources_manager.get_merged_agents_collection()
+                    if new_collection.exists():
+                        self.agents_collection = new_collection
+                        self.build_tree()
+                        self.load_installation_state()
+                        self.flatten_tree()
+                        self.sources_status_messages.append("✓ Agents collection refreshed")
+                except Exception as e:
+                    self.sources_status_messages.append(f"Warning: {e}")
+        
+        thread = threading.Thread(target=sync_thread, daemon=True)
         thread.start()
 
 def main():
