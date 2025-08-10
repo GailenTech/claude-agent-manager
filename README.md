@@ -19,8 +19,25 @@ El instalador:
 - Copia la colección de agentes a una ubicación centralizada
 - Configura todo automáticamente
 
-### Opción 2: Binario standalone
-Si prefieres un ejecutable único que no requiera Python instalado:
+### Opción 2: Binario precompilado (recomendado para usuarios finales)
+Descarga directamente desde GitHub Releases - no requiere Python instalado:
+
+```bash
+# macOS Intel
+curl -L https://github.com/GailenTech/claude-agent-manager/releases/latest/download/agent-manager-macos-x86_64.tar.gz | tar -xz
+sudo mv agent-manager-macos-x86_64 /usr/local/bin/agent-manager
+
+# macOS Apple Silicon (M1/M2/M3/M4)
+curl -L https://github.com/GailenTech/claude-agent-manager/releases/latest/download/agent-manager-macos-arm64.tar.gz | tar -xz
+sudo mv agent-manager-macos-arm64 /usr/local/bin/agent-manager
+
+# Linux x86_64
+curl -L https://github.com/GailenTech/claude-agent-manager/releases/latest/download/agent-manager-linux-x86_64.tar.gz | tar -xz
+sudo mv agent-manager-linux-x86_64 /usr/local/bin/agent-manager
+```
+
+### Opción 3: Compilar binario localmente
+Si prefieres compilar tu propio ejecutable:
 
 ```bash
 # Generar binario con PyInstaller
@@ -67,17 +84,24 @@ agent-manager
 ### Estructura del proyecto
 ```
 claude-agent-manager/
-├── agent-manager           # Script principal
-├── agents-collection/      # Colección de agentes organizados por categoría
+├── agent-manager                # Script principal
+├── agents-collection/          # Colección de agentes organizados por categoría
 │   ├── platform/
 │   ├── frontend/
 │   ├── backend/
 │   └── infrastructure/
-├── install.sh             # Instalador
-├── uninstall.sh          # Desinstalador
-├── build-binary.sh       # Generador de binario con PyInstaller
-└── build-binary-nuitka.sh # Generador de binario optimizado con Nuitka
+├── install.sh                  # Instalador
+├── uninstall.sh               # Desinstalador
+├── build-binary.sh            # Generador de binario con PyInstaller
+├── build-binary-nuitka.sh     # Generador de binario optimizado con Nuitka
+└── .github/workflows/release.yml # CI/CD para generar releases automáticos
 ```
+
+### Releases automáticos
+Los binarios se generan automáticamente con cada tag de versión:
+- Cuando se crea un tag `v*` (ej: `v1.0.0`), GitHub Actions compila binarios para todas las plataformas
+- Los releases incluyen checksums SHA256 para verificación
+- Disponibles para descarga inmediata en la sección Releases
 
 ## Licencia
 

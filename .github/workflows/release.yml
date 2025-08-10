@@ -1,0 +1,264 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x86_64]
+        
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install PyInstaller
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        
+    - name: Build Linux binary
+      run: |
+        # Create optimized spec
+        cat > build.spec << 'EOF'
+        import os
+        from PyInstaller.building.build_main import Analysis, PYZ, EXE
+        
+        a = Analysis(
+            ['agent-manager'],
+            pathex=[],
+            binaries=[],
+            datas=[('agents-collection', 'agents-collection')],
+            hiddenimports=['curses', '_curses'],
+            hookspath=[],
+            runtime_hooks=[],
+            excludes=['tkinter', 'matplotlib', 'numpy', 'scipy'],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=None,
+            noarchive=False
+        )
+        
+        pyz = PYZ(a.pure, a.zipped_data, cipher=None)
+        
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name='agent-manager-linux-${{ matrix.arch }}',
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=True,
+            console=True
+        )
+        EOF
+        
+        pyinstaller build.spec --clean --noconfirm
+        
+    - name: Test binary
+      run: |
+        chmod +x dist/agent-manager-linux-${{ matrix.arch }}
+        ls -la dist/
+        file dist/agent-manager-linux-${{ matrix.arch }}
+        
+    - name: Create archive
+      run: |
+        cd dist
+        tar -czf agent-manager-linux-${{ matrix.arch }}.tar.gz agent-manager-linux-${{ matrix.arch }}
+        sha256sum agent-manager-linux-${{ matrix.arch }}.tar.gz > agent-manager-linux-${{ matrix.arch }}.tar.gz.sha256
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-${{ matrix.arch }}
+        path: |
+          dist/agent-manager-linux-${{ matrix.arch }}.tar.gz
+          dist/agent-manager-linux-${{ matrix.arch }}.tar.gz.sha256
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-latest
+          - arch: arm64
+            runner: macos-latest
+        
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install PyInstaller
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        
+    - name: Build macOS binary
+      run: |
+        # Create optimized spec
+        cat > build.spec << 'EOF'
+        import os
+        from PyInstaller.building.build_main import Analysis, PYZ, EXE
+        
+        a = Analysis(
+            ['agent-manager'],
+            pathex=[],
+            binaries=[],
+            datas=[('agents-collection', 'agents-collection')],
+            hiddenimports=['curses', '_curses'],
+            hookspath=[],
+            runtime_hooks=[],
+            excludes=['tkinter', 'matplotlib', 'numpy', 'scipy'],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=None,
+            noarchive=False
+        )
+        
+        pyz = PYZ(a.pure, a.zipped_data, cipher=None)
+        
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name='agent-manager-macos-${{ matrix.arch }}',
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=False,
+            console=True,
+            target_arch='${{ matrix.arch }}'
+        )
+        EOF
+        
+        pyinstaller build.spec --clean --noconfirm
+        
+    - name: Test binary
+      run: |
+        chmod +x dist/agent-manager-macos-${{ matrix.arch }}
+        ls -la dist/
+        file dist/agent-manager-macos-${{ matrix.arch }}
+        
+    - name: Create archive
+      run: |
+        cd dist
+        tar -czf agent-manager-macos-${{ matrix.arch }}.tar.gz agent-manager-macos-${{ matrix.arch }}
+        shasum -a 256 agent-manager-macos-${{ matrix.arch }}.tar.gz > agent-manager-macos-${{ matrix.arch }}.tar.gz.sha256
+        
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-${{ matrix.arch }}
+        path: |
+          dist/agent-manager-macos-${{ matrix.arch }}.tar.gz
+          dist/agent-manager-macos-${{ matrix.arch }}.tar.gz.sha256
+
+  release:
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        
+    - name: List artifacts
+      run: find artifacts -name "*.tar.gz*" -ls
+      
+    - name: Get version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "push" ]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION="${{ github.event.inputs.tag }}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+        
+    - name: Generate release notes
+      run: |
+        cat > RELEASE_NOTES.md << EOF
+        # Claude Agent Manager ${{ steps.version.outputs.version }}
+        
+        Standalone binaries for macOS and Linux. No Python installation required.
+        
+        ## Quick Installation
+        
+        ### macOS
+        \`\`\`bash
+        # Intel Mac
+        curl -L https://github.com/GailenTech/claude-agent-manager/releases/download/${{ steps.version.outputs.version }}/agent-manager-macos-x86_64.tar.gz | tar -xz
+        sudo mv agent-manager-macos-x86_64 /usr/local/bin/agent-manager
+        
+        # Apple Silicon (M1/M2/M3/M4)
+        curl -L https://github.com/GailenTech/claude-agent-manager/releases/download/${{ steps.version.outputs.version }}/agent-manager-macos-arm64.tar.gz | tar -xz
+        sudo mv agent-manager-macos-arm64 /usr/local/bin/agent-manager
+        \`\`\`
+        
+        ### Linux
+        \`\`\`bash
+        # x86_64
+        curl -L https://github.com/GailenTech/claude-agent-manager/releases/download/${{ steps.version.outputs.version }}/agent-manager-linux-x86_64.tar.gz | tar -xz
+        sudo mv agent-manager-linux-x86_64 /usr/local/bin/agent-manager
+        \`\`\`
+        
+        ## Features
+        - 🌳 Tree view with nested folders
+        - 👤 Dual installation modes (User ~/.claude/agents / Project .claude/agents)
+        - 📊 Real-time change tracking
+        - 🎨 Color-coded interface (Blue=General, Green=Project)
+        - ⌨️ Intuitive keyboard controls
+        - 👁️ Agent preview before installation
+        
+        ## What's New
+        - Standalone binaries (no Python required)
+        - Improved performance and startup time
+        - All agent collections included
+        
+        ## Checksums
+        SHA256 checksums are provided for verification.
+        EOF
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: "Claude Agent Manager ${{ steps.version.outputs.version }}"
+        body_path: RELEASE_NOTES.md
+        draft: false
+        prerelease: false
+        files: |
+          artifacts/**/*.tar.gz
+          artifacts/**/*.sha256
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
