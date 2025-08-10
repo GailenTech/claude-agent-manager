@@ -36,19 +36,6 @@ curl -L https://github.com/GailenTech/claude-agent-manager/releases/latest/downl
 sudo mv agent-manager-linux-x86_64 /usr/local/bin/agent-manager
 ```
 
-### Opción 3: Compilar binario localmente
-Si prefieres compilar tu propio ejecutable:
-
-```bash
-# Generar binario con PyInstaller
-./build-binary.sh
-
-# O generar binario optimizado con Nuitka (más rápido, más pequeño)
-./build-binary-nuitka.sh
-
-# Instalar el binario
-sudo cp dist/agent-manager-* /usr/local/bin/agent-manager
-```
 
 ## Uso
 
@@ -137,8 +124,6 @@ claude-agent-manager/
 │   └── infrastructure/
 ├── install.sh                  # Instalador
 ├── uninstall.sh               # Desinstalador
-├── build-binary.sh            # Generador de binario con PyInstaller
-├── build-binary-nuitka.sh     # Generador de binario optimizado con Nuitka
 └── .github/workflows/release.yml # CI/CD para generar releases automáticos
 ```
 
