@@ -8,10 +8,289 @@ from enum import Enum
 from datetime import datetime, timedelta
 import tempfile
 import sys
+import json
+import subprocess
+import threading
+import time
+from typing import Dict, List, Optional, Any
+from dataclasses import dataclass, asdict
+from urllib.parse import urlparse
 
 class View(Enum):
     GENERAL = "general"    # User level (~/.claude/agents)
     PROJECT = "project"    # Project level (.claude/agents)
+    SOURCES = "sources"    # Sources management
+
+@dataclass
+class AgentSource:
+    """Represents an agent source configuration"""
+    id: str
+    name: str
+    url: str
+    path: str = "agents-collection"
+    enabled: bool = True
+    priority: int = 50
+    last_sync: Optional[str] = None
+    branch: str = "main"
+    readonly: bool = True
+    source_type: str = "git"  # git, local, http
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'AgentSource':
+        return cls(**data)
+
+@dataclass 
+class SourcesConfig:
+    """Configuration for the sources system"""
+    version: str = "1.0"
+    sources: List[AgentSource] = None
+    auto_sync: bool = True
+    sync_interval: int = 86400  # 24 hours
+    last_auto_sync: Optional[str] = None
+    
+    def __post_init__(self):
+        if self.sources is None:
+            # Default source - our repository
+            self.sources = [
+                AgentSource(
+                    id="default",
+                    name="Claude Agent Manager Official",
+                    url="https://github.com/GailenTech/claude-agent-manager.git",
+                    path="agents-collection",
+                    enabled=True,
+                    priority=100,
+                    readonly=False
+                )
+            ]
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "version": self.version,
+            "sources": [source.to_dict() for source in self.sources],
+            "auto_sync": self.auto_sync,
+            "sync_interval": self.sync_interval,
+            "last_auto_sync": self.last_auto_sync
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SourcesConfig':
+        sources = [AgentSource.from_dict(s) for s in data.get('sources', [])]
+        return cls(
+            version=data.get('version', '1.0'),
+            sources=sources,
+            auto_sync=data.get('auto_sync', True),
+            sync_interval=data.get('sync_interval', 86400),
+            last_auto_sync=data.get('last_auto_sync')
+        )
+
+class SourcesManager:
+    """Manages agent sources - loading, syncing, caching"""
+    
+    def __init__(self):
+        self.config_dir = Path.home() / ".config" / "claude-agent-manager"
+        self.cache_dir = Path.home() / ".cache" / "claude-agent-manager" / "sources"
+        self.config_file = self.config_dir / "sources.json"
+        
+        # Ensure directories exist
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        self.config: Optional[SourcesConfig] = None
+        self.load_config()
+    
+    def load_config(self) -> SourcesConfig:
+        """Load sources configuration from file"""
+        if self.config_file.exists():
+            try:
+                with open(self.config_file, 'r') as f:
+                    data = json.load(f)
+                self.config = SourcesConfig.from_dict(data)
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"Error loading sources config: {e}")
+                self.config = SourcesConfig()
+                self.save_config()
+        else:
+            self.config = SourcesConfig()
+            self.save_config()
+        
+        return self.config
+    
+    def save_config(self):
+        """Save sources configuration to file"""
+        with open(self.config_file, 'w') as f:
+            json.dump(self.config.to_dict(), f, indent=2)
+    
+    def get_enabled_sources(self) -> List[AgentSource]:
+        """Get list of enabled sources sorted by priority (descending)"""
+        enabled = [s for s in self.config.sources if s.enabled]
+        return sorted(enabled, key=lambda x: x.priority, reverse=True)
+    
+    def add_source(self, source: AgentSource) -> bool:
+        """Add a new source"""
+        # Check if ID already exists
+        if any(s.id == source.id for s in self.config.sources):
+            return False
+        
+        self.config.sources.append(source)
+        self.save_config()
+        return True
+    
+    def remove_source(self, source_id: str) -> bool:
+        """Remove a source by ID"""
+        original_count = len(self.config.sources)
+        self.config.sources = [s for s in self.config.sources if s.id != source_id]
+        
+        if len(self.config.sources) < original_count:
+            # Also remove cached data
+            cache_path = self.cache_dir / source_id
+            if cache_path.exists():
+                shutil.rmtree(cache_path)
+            
+            self.save_config()
+            return True
+        return False
+    
+    def toggle_source(self, source_id: str) -> Optional[bool]:
+        """Toggle source enabled/disabled state. Returns new state or None if not found"""
+        for source in self.config.sources:
+            if source.id == source_id:
+                source.enabled = not source.enabled
+                self.save_config()
+                return source.enabled
+        return None
+    
+    def get_source_cache_path(self, source_id: str) -> Path:
+        """Get cache path for a source"""
+        return self.cache_dir / source_id
+    
+    def sync_source(self, source_id: str, progress_callback=None) -> bool:
+        """Sync a single source"""
+        source = next((s for s in self.config.sources if s.id == source_id), None)
+        if not source:
+            return False
+        
+        cache_path = self.get_source_cache_path(source_id)
+        
+        try:
+            if source.source_type == "git":
+                return self._sync_git_source(source, cache_path, progress_callback)
+            elif source.source_type == "local":
+                return self._sync_local_source(source, cache_path, progress_callback)
+            # TODO: Add HTTP source support
+            
+        except Exception as e:
+            if progress_callback:
+                progress_callback(f"Error syncing {source.name}: {e}")
+            return False
+        
+        return False
+    
+    def _sync_git_source(self, source: AgentSource, cache_path: Path, progress_callback=None) -> bool:
+        """Sync a git-based source"""
+        if progress_callback:
+            progress_callback(f"Syncing {source.name}...")
+        
+        try:
+            if cache_path.exists():
+                # Update existing repo
+                result = subprocess.run([
+                    'git', '-C', str(cache_path), 'pull', 'origin', source.branch
+                ], capture_output=True, text=True, timeout=60)
+                
+                if result.returncode != 0:
+                    if progress_callback:
+                        progress_callback(f"Git pull failed: {result.stderr}")
+                    return False
+            else:
+                # Clone new repo
+                cache_path.parent.mkdir(parents=True, exist_ok=True)
+                result = subprocess.run([
+                    'git', 'clone', '--depth', '1', '--branch', source.branch, 
+                    source.url, str(cache_path)
+                ], capture_output=True, text=True, timeout=120)
+                
+                if result.returncode != 0:
+                    if progress_callback:
+                        progress_callback(f"Git clone failed: {result.stderr}")
+                    return False
+            
+            # Update last sync time
+            source.last_sync = datetime.now().isoformat()
+            self.save_config()
+            
+            if progress_callback:
+                progress_callback(f"✓ {source.name} synced successfully")
+            
+            return True
+            
+        except subprocess.TimeoutExpired:
+            if progress_callback:
+                progress_callback(f"Timeout syncing {source.name}")
+            return False
+        except Exception as e:
+            if progress_callback:
+                progress_callback(f"Error syncing {source.name}: {e}")
+            return False
+    
+    def _sync_local_source(self, source: AgentSource, cache_path: Path, progress_callback=None) -> bool:
+        """Sync a local directory source"""
+        if progress_callback:
+            progress_callback(f"Syncing local source {source.name}...")
+        
+        local_path = Path(source.url)
+        if not local_path.exists():
+            if progress_callback:
+                progress_callback(f"Local path not found: {local_path}")
+            return False
+        
+        try:
+            # Copy local directory to cache
+            if cache_path.exists():
+                shutil.rmtree(cache_path)
+            
+            shutil.copytree(local_path / source.path, cache_path, dirs_exist_ok=True)
+            
+            source.last_sync = datetime.now().isoformat()
+            self.save_config()
+            
+            if progress_callback:
+                progress_callback(f"✓ {source.name} synced successfully")
+            
+            return True
+            
+        except Exception as e:
+            if progress_callback:
+                progress_callback(f"Error syncing {source.name}: {e}")
+            return False
+    
+    def get_merged_agents_collection(self) -> Path:
+        """Get a merged view of all enabled sources"""
+        # For now, return the highest priority source
+        # TODO: Implement proper merging with conflict resolution
+        sources = self.get_enabled_sources()
+        if not sources:
+            return Path("agents-collection")  # Fallback to embedded
+        
+        highest_priority = sources[0]
+        cache_path = self.get_source_cache_path(highest_priority.id)
+        
+        if cache_path.exists():
+            agents_path = cache_path / highest_priority.path
+            if agents_path.exists():
+                return agents_path
+        
+        # Fallback to embedded collection
+        return Path("agents-collection")
+    
+    def sync_all_sources(self, progress_callback=None) -> Dict[str, bool]:
+        """Sync all enabled sources"""
+        results = {}
+        for source in self.get_enabled_sources():
+            results[source.id] = self.sync_source(source.id, progress_callback)
+        return results
 
 class TreeNode:
     def __init__(self, name, path, is_folder=False, level=0):
@@ -104,11 +383,22 @@ class TreeNode:
 class AgentManagerTree:
     def __init__(self):
         self.script_dir = Path(__file__).parent.absolute()
+        
+        # Initialize sources manager
+        self.sources_manager = SourcesManager()
+        
+        # Get agents collection from sources or fallback to embedded
         collection_path = os.environ.get('CLAUDE_AGENT_COLLECTION')
         if collection_path:
             self.agents_collection = Path(collection_path)
         else:
-            self.agents_collection = self.script_dir / "agents-collection"
+            # Try to use merged sources collection, fallback to embedded
+            try:
+                self.agents_collection = self.sources_manager.get_merged_agents_collection()
+                if not self.agents_collection.exists():
+                    self.agents_collection = self.script_dir / "agents-collection"
+            except:
+                self.agents_collection = self.script_dir / "agents-collection"
         
         self.user_agents = Path.home() / ".claude" / "agents"
         self.project_root = self.detect_project()
@@ -121,6 +411,11 @@ class AgentManagerTree:
         self.original_state = {}
         self.current_state = {}
         self.changes = {}
+        
+        # Sources view state
+        self.sources_index = 0
+        self.sources_status_messages = []
+        self.sync_in_progress = False
         
         self.build_tree()
         self.load_installation_state()
@@ -332,10 +627,16 @@ class AgentManagerTree:
             header_color = curses.color_pair(2)  # Blue for General
             view_text = "Vista General (Usuario)"
             target_path = str(self.user_agents)
-        else:
+        elif self.current_view == View.PROJECT:
             header_color = curses.color_pair(3)  # Green for Project
             view_text = f"Vista Proyecto: {self.project_root.name}"
             target_path = str(self.project_agents)
+        else:  # View.SOURCES
+            header_color = curses.color_pair(5)  # Cyan for Sources
+            view_text = "Gestión de Fuentes"
+            enabled_count = len(self.sources_manager.get_enabled_sources())
+            total_count = len(self.sources_manager.config.sources)
+            target_path = f"{enabled_count}/{total_count} fuentes activas"
         
         # Truncate path if needed
         max_path_len = width - 10
@@ -480,7 +781,7 @@ class AgentManagerTree:
         else:
             mode = "[1] Ver Proyecto  [2] Ver Usuario"
         
-        instructions = f"{mode}  [SPACE] Seleccionar/Expandir  [v] Ver  [s] Guardar  [q] Salir"
+        instructions = f"{mode}  [SPACE] Seleccionar/Expandir  [v] Ver  [g] Fuentes  [s] Guardar  [q] Salir"
         
         if len(instructions) < width:
             stdscr.addstr(height - 1, 2, instructions[:width-3], curses.color_pair(6))
@@ -567,8 +868,13 @@ class AgentManagerTree:
             stdscr.clear()
             
             self.draw_header(stdscr, height, width)
-            self.draw_tree(stdscr, height, width)
-            self.draw_instructions(stdscr, height, width)
+            
+            if self.current_view == View.SOURCES:
+                self.draw_sources_view(stdscr, height, width)
+                self.draw_sources_instructions(stdscr, height, width)
+            else:
+                self.draw_tree(stdscr, height, width)
+                self.draw_instructions(stdscr, height, width)
             
             stdscr.refresh()
             
@@ -576,12 +882,18 @@ class AgentManagerTree:
             
             # Navigation
             if key == curses.KEY_UP:
-                if self.current_index > 0:
-                    self.current_index -= 1
+                if self.current_view == View.SOURCES:
+                    self.handle_sources_navigation(key)
+                else:
+                    if self.current_index > 0:
+                        self.current_index -= 1
             
             elif key == curses.KEY_DOWN:
-                if self.current_index < len(self.flattened_nodes) - 1:
-                    self.current_index += 1
+                if self.current_view == View.SOURCES:
+                    self.handle_sources_navigation(key)
+                else:
+                    if self.current_index < len(self.flattened_nodes) - 1:
+                        self.current_index += 1
             
             elif key == curses.KEY_RIGHT or key == ord('\n'):
                 # Expand folder
@@ -607,15 +919,18 @@ class AgentManagerTree:
             
             # Space - toggle selection or expand/collapse folder
             elif key == ord(' '):
-                if self.current_index < len(self.flattened_nodes):
-                    node = self.flattened_nodes[self.current_index]
-                    if node.is_folder:
-                        # Toggle expand/collapse for folders
-                        node.toggle_expand()
-                        self.flatten_tree()
-                    else:
-                        # Toggle selection for agents
-                        self.toggle_selection(node)
+                if self.current_view == View.SOURCES:
+                    self.handle_sources_navigation(key)
+                else:
+                    if self.current_index < len(self.flattened_nodes):
+                        node = self.flattened_nodes[self.current_index]
+                        if node.is_folder:
+                            # Toggle expand/collapse for folders
+                            node.toggle_expand()
+                            self.flatten_tree()
+                        else:
+                            # Toggle selection for agents
+                            self.toggle_selection(node)
             
             
             # View switching
@@ -646,8 +961,21 @@ class AgentManagerTree:
             
             # Save
             elif key == ord('s') or key == ord('S'):
-                if self.show_confirmation(stdscr, height, width):
-                    self.save_changes()
+                if self.current_view == View.SOURCES:
+                    self.handle_sources_save_action()
+                else:
+                    if self.show_confirmation(stdscr, height, width):
+                        self.save_changes()
+            
+            # Sources management (new)
+            elif key == ord('g') or key == ord('G'):
+                if self.current_view != View.SOURCES:
+                    self.current_view = View.SOURCES
+                    self.sources_index = 0
+            
+            # Handle additional sources navigation when in sources view
+            elif self.current_view == View.SOURCES and key in [ord('a'), ord('A'), ord('d'), ord('D'), ord('u'), ord('U')]:
+                self.handle_sources_navigation(key)
             
             # Select all in current folder
             elif key == ord('a') or key == ord('A'):
@@ -697,10 +1025,170 @@ class AgentManagerTree:
                         self.save_changes()
                 break
             
-            # ESC - cancel changes
+            # ESC - cancel changes or exit sources view
             elif key == 27:
-                self.load_installation_state()
-                self.flatten_tree()
+                if self.current_view == View.SOURCES:
+                    self.current_view = View.GENERAL
+                    self.current_index = 0
+                else:
+                    self.load_installation_state()
+                    self.flatten_tree()
+    
+    def draw_sources_view(self, stdscr, height, width):
+        """Draw the sources management view"""
+        start_y = 6
+        max_visible = height - 8
+        
+        sources = self.sources_manager.config.sources
+        
+        # Draw sources list
+        for i, source in enumerate(sources):
+            if i >= max_visible:
+                break
+                
+            y_pos = start_y + i
+            is_current = i == self.sources_index
+            
+            # Source status icon
+            if source.enabled:
+                status = "●" if source.enabled else "○"
+                status_color = curses.color_pair(3) if source.enabled else curses.color_pair(6)
+            else:
+                status = "○"
+                status_color = curses.color_pair(6)
+            
+            # Priority indicator
+            priority_text = f"[{source.priority:3d}]"
+            
+            # Source info
+            sync_status = ""
+            if source.last_sync:
+                try:
+                    last_sync = datetime.fromisoformat(source.last_sync.replace('Z', '+00:00'))
+                    time_ago = datetime.now() - last_sync.replace(tzinfo=None)
+                    if time_ago.days > 0:
+                        sync_status = f" (synced {time_ago.days}d ago)"
+                    elif time_ago.seconds > 3600:
+                        sync_status = f" (synced {time_ago.seconds//3600}h ago)"
+                    else:
+                        sync_status = f" (synced {time_ago.seconds//60}m ago)"
+                except:
+                    sync_status = " (sync time unknown)"
+            else:
+                sync_status = " (never synced)"
+            
+            # Build display line
+            source_line = f"{status} {priority_text} {source.name}"
+            if len(source_line) > width - 20:
+                source_line = source_line[:width-23] + "..."
+            
+            # Draw the line
+            if is_current:
+                stdscr.addstr(y_pos, 2, source_line, curses.color_pair(1) | curses.A_BOLD)
+                # Show details on second line
+                if y_pos + 1 < height - 3:
+                    details = f"    {source.url}{sync_status}"
+                    if len(details) > width - 4:
+                        details = details[:width-7] + "..."
+                    stdscr.addstr(y_pos + 1, 2, details, curses.color_pair(6))
+            else:
+                stdscr.addstr(y_pos, 2, status, status_color)
+                stdscr.addstr(y_pos, 4, f"{priority_text} {source.name}")
+        
+        # Show status messages
+        if self.sources_status_messages:
+            msg_start_y = height - 6
+            for i, msg in enumerate(self.sources_status_messages[-3:]):  # Show last 3 messages
+                if msg_start_y + i < height - 3:
+                    stdscr.addstr(msg_start_y + i, 2, msg[:width-4], curses.color_pair(4))
+    
+    def draw_sources_instructions(self, stdscr, height, width):
+        """Draw sources view instructions"""
+        stdscr.addstr(height - 2, 0, "─" * width, curses.color_pair(6))
+        
+        instructions = "[↑/↓] Nav  [SPACE] Toggle  [a] Add  [d] Delete  [u] Update  [ESC] Back  [q] Quit"
+        
+        if len(instructions) < width:
+            stdscr.addstr(height - 1, 2, instructions[:width-3], curses.color_pair(6))
+    
+    def handle_sources_navigation(self, key):
+        """Handle navigation in sources view"""
+        sources_count = len(self.sources_manager.config.sources)
+        
+        if key == curses.KEY_UP:
+            self.sources_index = max(0, self.sources_index - 1)
+        elif key == curses.KEY_DOWN:
+            self.sources_index = min(sources_count - 1, self.sources_index + 1)
+        elif key == ord(' '):
+            # Toggle source enabled/disabled
+            if self.sources_index < sources_count:
+                source = self.sources_manager.config.sources[self.sources_index]
+                new_state = self.sources_manager.toggle_source(source.id)
+                if new_state is not None:
+                    status = "enabled" if new_state else "disabled"
+                    self.sources_status_messages.append(f"Source '{source.name}' {status}")
+        elif key == ord('a') or key == ord('A'):
+            # Add new source (placeholder)
+            self.sources_status_messages.append("Add source: Feature coming soon")
+        elif key == ord('d') or key == ord('D'):
+            # Delete source
+            if self.sources_index < sources_count:
+                source = self.sources_manager.config.sources[self.sources_index]
+                if source.id != "default":  # Protect default source
+                    if self.sources_manager.remove_source(source.id):
+                        self.sources_status_messages.append(f"Removed source '{source.name}'")
+                        self.sources_index = min(self.sources_index, len(self.sources_manager.config.sources) - 1)
+                else:
+                    self.sources_status_messages.append("Cannot delete default source")
+        elif key == ord('u') or key == ord('U'):
+            # Update/sync sources
+            if not self.sync_in_progress:
+                self.sync_sources_async()
+        
+        # Keep status messages manageable
+        if len(self.sources_status_messages) > 10:
+            self.sources_status_messages = self.sources_status_messages[-10:]
+    
+    def sync_sources_async(self):
+        """Sync sources in background"""
+        if self.sync_in_progress:
+            return
+        
+        def progress_callback(message):
+            self.sources_status_messages.append(message)
+        
+        def sync_thread():
+            self.sync_in_progress = True
+            self.sources_status_messages.append("Starting sync...")
+            results = self.sources_manager.sync_all_sources(progress_callback)
+            
+            success_count = sum(1 for success in results.values() if success)
+            total_count = len(results)
+            
+            self.sources_status_messages.append(f"Sync complete: {success_count}/{total_count} successful")
+            
+            # Reload agents collection if sync was successful
+            if success_count > 0:
+                try:
+                    new_collection = self.sources_manager.get_merged_agents_collection()
+                    if new_collection.exists():
+                        self.agents_collection = new_collection
+                        self.build_tree()
+                        self.load_installation_state()
+                        self.flatten_tree()
+                        self.sources_status_messages.append("Agents collection refreshed")
+                except Exception as e:
+                    self.sources_status_messages.append(f"Error refreshing collection: {e}")
+            
+            self.sync_in_progress = False
+        
+        thread = threading.Thread(target=sync_thread, daemon=True)
+        thread.start()
+    
+    def handle_sources_save_action(self):
+        """Handle save action in sources view (sync all)"""
+        if not self.sync_in_progress:
+            self.sync_sources_async()
 
 def main():
     try:

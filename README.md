@@ -62,16 +62,52 @@ agent-manager
 - `SPACE` Seleccionar agente o expandir/colapsar carpeta
 - `1` Vista Proyecto
 - `2` Vista Usuario
+- `g` Gestión de Fuentes (nuevo)
 - `v` Ver contenido del agente
 - `s` Guardar cambios
 - `q` Salir
 
+#### Gestión de Fuentes
+- `↑/↓` Navegar entre fuentes
+- `SPACE` Activar/desactivar fuente
+- `u` Actualizar/sincronizar fuentes
+- `d` Eliminar fuente
+- `ESC` Volver a vista principal
+
 ### Características
 - **Estructura de árbol**: Navega por categorías y subcarpetas de agentes
-- **Dos niveles de instalación**: Usuario (`~/.claude/agents`) o Proyecto (`.claude/agents`)
+- **Dos niveles de instalación**: Usuario (`~/.claude/agents`) or Proyecto (`.claude/agents`)
+- **Sistema de fuentes extensible**: Gestiona múltiples repositorios de agentes
+- **Sincronización automática**: Actualiza colecciones desde Git, directorios locales, o URLs
+- **Sistema de prioridades**: Resuelve conflictos entre fuentes automáticamente
 - **Seguimiento de cambios**: Visualiza qué se añadirá (+) o eliminará (-) antes de guardar
-- **Códigos de color**: Azul para vista Usuario, Verde para vista Proyecto
+- **Códigos de color**: Azul para Usuario, Verde para Proyecto, Cian para Fuentes
 - **Vista previa**: Lee el contenido de los agentes antes de instalarlos
+
+### Sistema de Fuentes
+
+El Agent Manager incluye un sistema de fuentes extensible que permite:
+
+#### Fuente por defecto
+- **Repositorio oficial**: `https://github.com/GailenTech/claude-agent-manager.git`
+- Se instala automáticamente con prioridad alta (100)
+- Contiene agentes especializados para desarrollo
+
+#### Agregar fuentes personalizadas
+```bash
+# Mediante la UI: presiona 'g' -> 'a' y sigue las instrucciones
+# O editando manualmente: ~/.config/claude-agent-manager/sources.json
+```
+
+#### Tipos de fuentes soportados
+- **Git**: Repositorios públicos/privados con actualización automática
+- **Local**: Directorios en el sistema de archivos local
+- **HTTP**: URLs de archivos ZIP/tar.gz (próximamente)
+
+#### Configuración persistente
+- Config: `~/.config/claude-agent-manager/sources.json`
+- Cache: `~/.cache/claude-agent-manager/sources/`
+- Cada fuente tiene su propia carpeta de cache con actualizaciones incrementales
 
 ## Desinstalar
 
