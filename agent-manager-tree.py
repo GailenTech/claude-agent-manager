@@ -62,20 +62,6 @@ class TreeNode:
         if self.is_folder:
             self.expanded = not self.expanded
     
-    def expand_all(self):
-        """Expand this folder and all subfolders"""
-        if self.is_folder:
-            self.expanded = True
-            for child in self.children:
-                child.expand_all()
-    
-    def collapse_all(self):
-        """Collapse this folder and all subfolders"""
-        if self.is_folder:
-            self.expanded = False
-            for child in self.children:
-                child.collapse_all()
-    
     def update_changes_summary(self, changes_dict):
         """Update changes summary for this node and propagate to parents"""
         if not self.is_folder:
@@ -456,17 +442,15 @@ class AgentManagerTree:
         """Draw instructions bar"""
         stdscr.addstr(height - 2, 0, "─" * width, curses.color_pair(6))
         
-        instructions = "[↑/↓] Nav [→] Expandir [←] Colapsar [SPACE] Sel [*] Expandir todo [s] Guardar [q] Salir"
-        
         if self.current_view == View.GENERAL:
-            mode = "[1] General [2] Proyecto"
+            mode = "[1] Ver Proyecto  [2] Ver Usuario"
         else:
-            mode = "[1] General [2] Proyecto"
+            mode = "[1] Ver Proyecto  [2] Ver Usuario"
         
-        full_text = f"{instructions}  {mode}"
+        instructions = f"{mode}  [SPACE] Seleccionar/Expandir  [s] Guardar  [q] Salir"
         
-        if len(full_text) < width:
-            stdscr.addstr(height - 1, 2, full_text[:width-3], curses.color_pair(6))
+        if len(instructions) < width:
+            stdscr.addstr(height - 1, 2, instructions[:width-3], curses.color_pair(6))
     
     def show_confirmation(self, stdscr, height, width):
         """Show confirmation dialog"""
@@ -476,7 +460,7 @@ class AgentManagerTree:
             return False
         
         dialog_height = 10 + len(adds) + len(removes)
-        dialog_width = 60
+        dialog_width = 70
         dialog_y = (height - dialog_height) // 2
         dialog_x = (width - dialog_width) // 2
         
@@ -487,8 +471,20 @@ class AgentManagerTree:
         dialog.addstr(0, (dialog_width - len(title)) // 2, title, curses.A_BOLD)
         
         y = 2
-        target = "Usuario" if self.current_view == View.GENERAL else "Proyecto"
-        dialog.addstr(y, 2, f"Destino: {target}", curses.A_BOLD)
+        # Show exact path
+        if self.current_view == View.GENERAL:
+            target_path = str(self.user_agents)
+            target_label = "Usuario"
+        else:
+            target_path = str(self.project_agents)
+            target_label = "Proyecto"
+        
+        # Truncate path if too long
+        max_path_len = dialog_width - 15
+        if len(target_path) > max_path_len:
+            target_path = "..." + target_path[-(max_path_len-3):]
+        
+        dialog.addstr(y, 2, f"{target_label}: {target_path}", curses.A_BOLD)
         y += 2
         
         if adds:
@@ -588,26 +584,18 @@ class AgentManagerTree:
                         # Toggle selection for agents
                         self.toggle_selection(node)
             
-            # Expand/collapse all
-            elif key == ord('*'):
-                for node in self.tree_root.children:
-                    if all(child.expanded for child in self.tree_root.children if child.is_folder):
-                        node.collapse_all()
-                    else:
-                        node.expand_all()
-                self.flatten_tree()
             
             # View switching
-            elif key == ord('1'):
-                if self.current_view != View.GENERAL:
-                    self.current_view = View.GENERAL
+            elif key == ord('1') and self.project_root:
+                if self.current_view != View.PROJECT:
+                    self.current_view = View.PROJECT
                     self.current_index = 0
                     self.load_installation_state()
                     self.flatten_tree()
             
-            elif key == ord('2') and self.project_root:
-                if self.current_view != View.PROJECT:
-                    self.current_view = View.PROJECT
+            elif key == ord('2'):
+                if self.current_view != View.GENERAL:
+                    self.current_view = View.GENERAL
                     self.current_index = 0
                     self.load_installation_state()
                     self.flatten_tree()
