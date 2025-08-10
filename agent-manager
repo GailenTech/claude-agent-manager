@@ -480,7 +480,7 @@ class AgentManagerTree:
         else:
             mode = "[1] Ver Proyecto  [2] Ver Usuario"
         
-        instructions = f"{mode}  [SPACE] Seleccionar/Expandir  [s] Guardar  [q] Salir"
+        instructions = f"{mode}  [SPACE] Seleccionar/Expandir  [v] Ver  [s] Guardar  [q] Salir"
         
         if len(instructions) < width:
             stdscr.addstr(height - 1, 2, instructions[:width-3], curses.color_pair(6))
