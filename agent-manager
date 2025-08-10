@@ -1465,7 +1465,7 @@ class AgentManagerTree:
         thread.start()
     
     def init_add_source_form(self):
-        \"\"\"Initialize add source form\"\"\"
+        """Initialize add source form"""
         self.add_form_fields = {
             'url': '',
             'name': '',
@@ -1476,7 +1476,7 @@ class AgentManagerTree:
         self.add_form_current_field = 0
     
     def handle_add_form_navigation(self, key):
-        \"\"\"Handle navigation in add form\"\"\"
+        """Handle navigation in add form"""
         field_count = 5  # url, name, type, priority, path
         
         if key == curses.KEY_UP:
@@ -1485,29 +1485,29 @@ class AgentManagerTree:
             self.add_form_current_field = min(field_count - 1, self.add_form_current_field + 1)
     
     def handle_add_form_typing(self, char):
-        \"\"\"Handle typing in form fields\"\"\"
+        """Handle typing in form fields"""
         field_names = ['url', 'name', 'type', 'priority', 'path']
         field_name = field_names[self.add_form_current_field]
         self.add_form_fields[field_name] += char
     
     def handle_add_form_backspace(self):
-        \"\"\"Handle backspace in form fields\"\"\"
+        """Handle backspace in form fields"""
         field_names = ['url', 'name', 'type', 'priority', 'path']
         field_name = field_names[self.add_form_current_field]
         if self.add_form_fields[field_name]:
             self.add_form_fields[field_name] = self.add_form_fields[field_name][:-1]
     
     def draw_add_source_form(self, stdscr, height, width):
-        \"\"\"Draw simplified add source form\"\"\"
+        """Draw simplified add source form"""
         # Header
-        title = \" Add New Agent Source \"
+        title = " Add New Agent Source "
         header_color = curses.color_pair(5)
         
-        stdscr.addstr(0, 0, \"╔\" + \"═\" * (width-2) + \"╗\", header_color | curses.A_BOLD)
-        stdscr.addstr(1, 0, \"║\", header_color | curses.A_BOLD)
-        stdscr.addstr(1, width-1, \"║\", header_color | curses.A_BOLD)
+        stdscr.addstr(0, 0, "╔" + "═" * (width-2) + "╗", header_color | curses.A_BOLD)
+        stdscr.addstr(1, 0, "║", header_color | curses.A_BOLD)
+        stdscr.addstr(1, width-1, "║", header_color | curses.A_BOLD)
         stdscr.addstr(1, (width - len(title)) // 2, title, header_color | curses.A_BOLD)
-        stdscr.addstr(2, 0, \"╚\" + \"═\" * (width-2) + \"╝\", header_color | curses.A_BOLD)
+        stdscr.addstr(2, 0, "╚" + "═" * (width-2) + "╝", header_color | curses.A_BOLD)
         
         # Form fields
         start_y = 4
@@ -1539,29 +1539,29 @@ class AgentManagerTree:
             
             # Draw field with cursor if active
             cursor_char = '█' if i == self.add_form_current_field else ' '
-            field_display = f\"{display_value}{cursor_char}\"[:max_width]
+            field_display = f"{display_value}{cursor_char}"[:max_width]
             stdscr.addstr(y + 1, 4, field_display, attr)
         
         # Examples
         help_y = start_y + len(field_names) * 2 + 1
         if help_y < height - 4:
-            stdscr.addstr(help_y, 2, \"Examples:\", curses.A_BOLD)
-            stdscr.addstr(help_y + 1, 2, \"https://github.com/awesome-agents/collection.git\", curses.color_pair(6))
-            stdscr.addstr(help_y + 2, 2, \"/local/path/to/agents\", curses.color_pair(6))
+            stdscr.addstr(help_y, 2, "Examples:", curses.A_BOLD)
+            stdscr.addstr(help_y + 1, 2, "https://github.com/awesome-agents/collection.git", curses.color_pair(6))
+            stdscr.addstr(help_y + 2, 2, "/local/path/to/agents", curses.color_pair(6))
         
         # Instructions
-        instructions = \"[↑/↓] Navigate  [Type] Edit  [ENTER] Submit  [ESC] Cancel\"
+        instructions = "[↑/↓] Navigate  [Type] Edit  [ENTER] Submit  [ESC] Cancel"
         stdscr.addstr(height - 2, 2, instructions[:width-4], curses.color_pair(6))
     
     def process_add_source_form(self):
-        \"\"\"Process add source form with validation\"\"\"
+        """Process add source form with validation"""
         # Basic validation
         if not self.add_form_fields['url'].strip():
-            self.sources_status_messages.append(\"✗ URL is required\")
+            self.sources_status_messages.append("✗ URL is required")
             return False
         
         if not self.add_form_fields['name'].strip():
-            self.sources_status_messages.append(\"✗ Name is required\")
+            self.sources_status_messages.append("✗ Name is required")
             return False
         
         # Prepare source data
@@ -1594,7 +1594,7 @@ class AgentManagerTree:
             )
             
             if self.sources_manager.add_source(new_source):
-                self.sources_status_messages.append(f\"✓ Added source '{new_source.name}'\")
+                self.sources_status_messages.append(f"✓ Added source '{new_source.name}'")
                 
                 # Auto-sync new source
                 if self.confirm_immediate_sync(new_source.name):
@@ -1602,11 +1602,11 @@ class AgentManagerTree:
                 
                 return True
             else:
-                self.sources_status_messages.append(\"✗ Failed to add source (ID conflict)\")
+                self.sources_status_messages.append("✗ Failed to add source (ID conflict)")
         else:
             # Show validation errors
             for error in validation_result.get('errors', []):
-                self.sources_status_messages.append(f\"✗ {error}\")
+                self.sources_status_messages.append(f"✗ {error}")
         
         return False
     
