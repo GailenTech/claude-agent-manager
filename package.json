@@ -1,0 +1,41 @@
+{
+  "name": "claude-code-agent-manager",
+  "version": "1.0.3",
+  "description": "Terminal-based agent manager for Claude Code with extensible sources system",
+  "main": "bin/agent-manager.js",
+  "bin": {
+    "agent-manager": "./bin/agent-manager.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/download-binary.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GailenTech/claude-agent-manager.git"
+  },
+  "keywords": [
+    "claude",
+    "agents",
+    "ai",
+    "terminal",
+    "cli",
+    "productivity"
+  ],
+  "author": "GailenTech",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/GailenTech/claude-agent-manager/issues"
+  },
+  "homepage": "https://github.com/GailenTech/claude-agent-manager#readme",
+  "os": ["darwin", "linux"],
+  "cpu": ["x64", "arm64"],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "README.md"
+  ]
+}
