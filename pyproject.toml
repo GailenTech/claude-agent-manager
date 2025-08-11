@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "claude-agent-manager"
+version = "1.0.0"
+description = "Terminal-based agent manager for Claude Code with extensible sources system"
+readme = "README.md"
+license = {text = "Proprietary"}
+authors = [
+    {name = "GailenTech", email = "contact@gailentech.com"}
+]
+keywords = ["claude", "agents", "ai", "terminal", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Tools",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/GailenTech/claude-agent-manager"
+Repository = "https://github.com/GailenTech/claude-agent-manager.git"
+Issues = "https://github.com/GailenTech/claude-agent-manager/issues"
+
+[project.scripts]
+agent-manager = "claude_agent_manager:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claude_agent_manager"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/agents-collection",
+    "/README.md",
+    "/install.sh",
+    "/uninstall.sh"
+]

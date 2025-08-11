@@ -1,0 +1,7 @@
+{
+  "name": "test-npm-bin-jorge",
+  "version": "1.0.0",
+  "bin": {
+    "test-bin": "./index.js"
+  }
+}

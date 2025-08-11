@@ -516,7 +516,7 @@ class TreeNode:
         if self.is_folder:
             self.expanded = not self.expanded
     
-    def update_changes_summary(self, changes_dict, agent_manager=None):
+    def update_changes_summary(self, changes_dict):
         """Update changes summary for this node and propagate to parents"""
         if not self.is_folder:
             return
@@ -528,17 +528,13 @@ class TreeNode:
         for child in self.children:
             if child.is_folder:
                 # Recursively update child folders first
-                child.update_changes_summary(changes_dict, agent_manager)
+                child.update_changes_summary(changes_dict)
                 # Add child folder's changes to this folder
                 self.changes_summary['add'] += child.changes_summary['add']
                 self.changes_summary['remove'] += child.changes_summary['remove']
             else:
                 # Check if this agent has changes
-                if agent_manager:
-                    relative_path = agent_manager.get_relative_key(child.path)
-                else:
-                    # Fallback if no agent_manager provided
-                    relative_path = child.path.name
+                relative_path = str(child.path.relative_to(child.path.parent.parent.parent)) if child.path.parent.parent.parent.exists() else child.name
                 for key, change_type in changes_dict.items():
                     if change_type and child.name in key:
                         if change_type == 'add':
@@ -625,26 +621,6 @@ class AgentManagerTree:
         except:
             return False
     
-    def get_relative_key(self, node_path):
-        """Get relative key for a node path, handling different installations"""
-        try:
-            return str(node_path.relative_to(self.agents_collection))
-        except ValueError:
-            # Path might be from a different installation
-            # Try to reconstruct the relative path from the node structure
-            if node_path.is_file():
-                # For files, use just the filename
-                return node_path.name
-            else:
-                # For directories, try to use the last parts of the path
-                parts = node_path.parts
-                # Find common structure (e.g., backend/, frontend/, etc.)
-                for i, part in enumerate(parts):
-                    if part in ['backend', 'frontend', 'platform', 'infrastructure']:
-                        return '/'.join(parts[i:])
-                # Fallback to just the name
-                return node_path.name
-    
     def get_agent_info(self, file_path):
         """Extract agent description from file"""
         desc = "No description"
@@ -720,7 +696,7 @@ class AgentManagerTree:
             node.selected = node.installed
             
             # Track state
-            key = self.get_relative_key(node.path)
+            key = str(node.path.relative_to(self.agents_collection))
             self.original_state[key] = node.installed
             self.current_state[key] = node.installed
             self.changes[key] = None
@@ -758,7 +734,7 @@ class AgentManagerTree:
         
         node.selected = not node.selected
         
-        key = self.get_relative_key(node.path)
+        key = str(node.path.relative_to(self.agents_collection))
         self.current_state[key] = node.selected
         
         if self.current_state[key] == self.original_state[key]:
@@ -774,7 +750,7 @@ class AgentManagerTree:
     def update_all_changes_summary(self):
         """Update changes summary for entire tree"""
         for child in self.tree_root.children:
-            child.update_changes_summary(self.changes, self)
+            child.update_changes_summary(self.changes)
     
     def get_changes_summary(self):
         """Get summary of pending changes"""
@@ -815,7 +791,7 @@ class AgentManagerTree:
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as tmp:
             tmp.write(f"# VIEWING (READ-ONLY): {node.name}\n")
-            tmp.write(f"# Path: {self.get_relative_key(node.path)}\n")
+            tmp.write(f"# Path: {node.path.relative_to(self.agents_collection)}\n")
             tmp.write(f"# {'=' * 60}\n\n")
             with open(node.path, 'r') as original:
                 tmp.write(original.read())
@@ -958,11 +934,7 @@ class AgentManagerTree:
                 new_marker = "*" if node.is_new else " "
                 
                 # Determine color based on changes
-                try:
-                    key = self.get_relative_key(node.path)
-                except ValueError:
-                    # Path might be from a different installation, use filename
-                    key = node.path.name
+                key = str(node.path.relative_to(self.agents_collection))
                 change = self.changes.get(key)
                 
                 if change == 'add':
@@ -1211,7 +1183,7 @@ class AgentManagerTree:
                     for node in self.flattened_nodes:
                         if not node.is_folder and node.parent == parent:
                             node.selected = True
-                            key = self.get_relative_key(node.path)
+                            key = str(node.path.relative_to(self.agents_collection))
                             self.current_state[key] = True
                             if self.current_state[key] != self.original_state[key]:
                                 self.changes[key] = 'add'
@@ -1230,7 +1202,7 @@ class AgentManagerTree:
                     for node in self.flattened_nodes:
                         if not node.is_folder and node.parent == parent:
                             node.selected = False
-                            key = self.get_relative_key(node.path)
+                            key = str(node.path.relative_to(self.agents_collection))
                             self.current_state[key] = False
                             if self.current_state[key] != self.original_state[key]:
                                 self.changes[key] = 'remove'
