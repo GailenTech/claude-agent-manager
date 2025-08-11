@@ -56,12 +56,22 @@ else
 fi
 
 # Installation options
-echo -e "\n${BOLD}Installation Options:${NC}"
-echo "1) System-wide installation (recommended)"
-echo "2) User-only installation (~/.local/bin)"
-echo "3) Custom location"
-echo
-read -p "Select option [1-3]: " install_option
+# Check for non-interactive mode
+if [ -n "$AGENT_MANAGER_INSTALL_MODE" ]; then
+    install_option="$AGENT_MANAGER_INSTALL_MODE"
+    echo -e "\n${CYAN}Using installation mode: $install_option (non-interactive)${NC}"
+elif [ ! -t 0 ]; then
+    # No TTY available (piped), use default
+    install_option="1"
+    echo -e "\n${CYAN}No TTY detected, using default system-wide installation${NC}"
+else
+    echo -e "\n${BOLD}Installation Options:${NC}"
+    echo "1) System-wide installation (recommended)"
+    echo "2) User-only installation (~/.local/bin)"
+    echo "3) Custom location"
+    echo
+    read -p "Select option [1-3]: " install_option
+fi
 
 case "$install_option" in
     1)
@@ -96,10 +106,15 @@ echo "  Agent collection: $AGENT_COLLECTION_DIR"
 echo "  Configuration:    $CONFIG_DIR"
 echo
 
-read -p "Proceed with installation? [y/N]: " confirm
-if [[ ! "$confirm" =~ ^[yY]$ ]]; then
-    echo "Installation cancelled."
-    exit 0
+# Skip confirmation in non-interactive mode
+if [ -t 0 ] && [ -z "$AGENT_MANAGER_AUTO_CONFIRM" ]; then
+    read -p "Proceed with installation? [y/N]: " confirm
+    if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+        echo "Installation cancelled."
+        exit 0
+    fi
+else
+    echo -e "${CYAN}Proceeding with installation (non-interactive mode)${NC}"
 fi
 
 # Create directories
