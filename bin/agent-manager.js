@@ -1,4 +1,4 @@
-#\!/usr/bin/env node
+#!/usr/bin/env node
 
 const { spawn } = require('child_process');
 const path = require('path');
@@ -41,7 +41,7 @@ function findBinary() {
 function main() {
   const binaryPath = findBinary();
   
-  if (\!binaryPath) {
+  if (!binaryPath) {
     console.error('Claude Agent Manager binary not found.');
     console.error('The installation may have failed.');
     console.error('');

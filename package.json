@@ -1,6 +1,6 @@
 {
   "name": "claude-code-agent-manager",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Terminal-based agent manager for Claude Code with extensible sources system",
   "main": "bin/agent-manager.js",
   "bin": {
