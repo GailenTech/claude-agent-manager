@@ -334,7 +334,12 @@ class SourcesManager:
         
         for source in sources:
             cache_path = self.get_source_cache_path(source.id)
-            source_agents_path = cache_path / source.path
+            
+            # Handle path correctly - if it's '.' or empty, use cache_path directly
+            if source.path in ['.', '', None]:
+                source_agents_path = cache_path
+            else:
+                source_agents_path = cache_path / source.path
             
             if not source_agents_path.exists():
                 continue
