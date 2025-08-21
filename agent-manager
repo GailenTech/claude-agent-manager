@@ -1101,12 +1101,41 @@ class AgentManagerTree:
             
             key = stdscr.getch()
             
+            # Handle ADD_SOURCE form keys FIRST (before any other processing)
+            if self.current_view == "ADD_SOURCE":
+                if key == ord('\n'):  # Submit form
+                    if self.process_add_source_form():
+                        self.current_view = View.SOURCES
+                elif key == curses.KEY_UP:
+                    self.handle_add_form_navigation(key)
+                elif key == curses.KEY_DOWN:
+                    self.handle_add_form_navigation(key)
+                elif key == 27:  # ESC
+                    self.current_view = View.SOURCES
+                    self.sources_status_messages.append("✗ Add source cancelled")
+                elif key == curses.KEY_BACKSPACE or key == 127 or key == 8:
+                    self.handle_add_form_backspace()
+                elif key == 22:  # Ctrl+V for paste
+                    # Try to get clipboard content
+                    try:
+                        import subprocess
+                        result = subprocess.run(['pbpaste'], capture_output=True, text=True)
+                        if result.returncode == 0:
+                            clipboard_text = result.stdout
+                            for char in clipboard_text:
+                                if 32 <= ord(char) <= 126:
+                                    self.handle_add_form_typing(char)
+                    except:
+                        pass  # Clipboard not available
+                elif 32 <= key <= 126:  # Printable characters
+                    self.handle_add_form_typing(chr(key))
+                    stdscr.refresh()  # Force immediate refresh
+                continue  # Skip all other key processing for ADD_SOURCE mode
+            
             # Navigation
             if key == curses.KEY_UP:
                 if self.current_view == View.SOURCES:
                     self.handle_sources_navigation(key)
-                elif self.current_view == "ADD_SOURCE":
-                    self.handle_add_form_navigation(key)
                 else:
                     if self.current_index > 0:
                         self.current_index -= 1
@@ -1114,8 +1143,6 @@ class AgentManagerTree:
             elif key == curses.KEY_DOWN:
                 if self.current_view == View.SOURCES:
                     self.handle_sources_navigation(key)
-                elif self.current_view == "ADD_SOURCE":
-                    self.handle_add_form_navigation(key)
                 else:
                     if self.current_index < len(self.flattened_nodes) - 1:
                         self.current_index += 1
@@ -1202,8 +1229,8 @@ class AgentManagerTree:
             elif self.current_view == View.SOURCES and key in [ord('a'), ord('A'), ord('d'), ord('D'), ord('u'), ord('U')]:
                 self.handle_sources_navigation(key)
             
-            # Select all in current folder
-            elif key == ord('a') or key == ord('A'):
+            # Select all in current folder (not in Sources view or ADD_SOURCE)
+            elif (key == ord('a') or key == ord('A')) and self.current_view not in [View.SOURCES, "ADD_SOURCE"]:
                 if self.current_index < len(self.flattened_nodes):
                     current = self.flattened_nodes[self.current_index]
                     parent = current.parent if not current.is_folder else current
@@ -1255,22 +1282,9 @@ class AgentManagerTree:
                 if self.current_view == View.SOURCES:
                     self.current_view = View.GENERAL
                     self.current_index = 0
-                elif self.current_view == "ADD_SOURCE":
-                    self.current_view = View.SOURCES
-                    self.sources_status_messages.append("✗ Add source cancelled")
                 else:
                     self.load_installation_state()
                     self.flatten_tree()
-            
-            # Handle ADD_SOURCE form keys
-            elif self.current_view == "ADD_SOURCE":
-                if key == ord('\n'):  # Submit form
-                    if self.process_add_source_form():
-                        self.current_view = View.SOURCES
-                elif 32 <= key <= 126:  # Typing
-                    self.handle_add_form_typing(chr(key))
-                elif key == curses.KEY_BACKSPACE or key == 127:
-                    self.handle_add_form_backspace()
     
     def draw_sources_view(self, stdscr, height, width):
         """Draw the sources management view"""
@@ -1567,19 +1581,22 @@ class AgentManagerTree:
             
             # Field value
             field_value = self.add_form_fields.get(field_name, '')
-            max_width = width - 6
-            display_value = field_value[:max_width]
+            max_width = width - 10
             
             # Highlight current field
             if i == self.add_form_current_field:
                 attr = curses.color_pair(1) | curses.A_REVERSE
+                # Show cursor at end of text for active field
+                display_value = field_value[-max_width+1:] if len(field_value) > max_width-1 else field_value
+                field_display = display_value + "_"
             else:
                 attr = curses.color_pair(6)
+                display_value = field_value[:max_width]
+                field_display = display_value
             
-            # Draw field with cursor if active
-            cursor_char = '█' if i == self.add_form_current_field else ' '
-            field_display = f"{display_value}{cursor_char}"[:max_width]
-            stdscr.addstr(y + 1, 4, field_display, attr)
+            # Clear the line first then draw field
+            stdscr.addstr(y + 1, 4, " " * max_width, attr)
+            stdscr.addstr(y + 1, 4, field_display[:max_width], attr)
         
         # Examples
         help_y = start_y + len(field_names) * 2 + 1
@@ -1589,7 +1606,7 @@ class AgentManagerTree:
             stdscr.addstr(help_y + 2, 2, "/local/path/to/agents", curses.color_pair(6))
         
         # Instructions
-        instructions = "[↑/↓] Navigate  [Type] Edit  [ENTER] Submit  [ESC] Cancel"
+        instructions = "[↑/↓] Navigate  [Type] Edit  [Ctrl+V] Paste  [ENTER] Submit  [ESC] Cancel"
         stdscr.addstr(height - 2, 2, instructions[:width-4], curses.color_pair(6))
     
     def process_add_source_form(self):
