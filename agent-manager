@@ -247,11 +247,37 @@ class SourcesManager:
             return False
         
         try:
+            # Determine the actual source path
+            # If source.path is provided and not empty/default, append it
+            if source.path and source.path not in ['', '.', 'agents-collection']:
+                source_path = local_path / source.path
+            else:
+                source_path = local_path
+            
+            # Check if the source path exists
+            if not source_path.exists():
+                if progress_callback:
+                    progress_callback(f"Source path not found: {source_path}")
+                return False
+            
             # Copy local directory to cache
             if cache_path.exists():
                 shutil.rmtree(cache_path)
             
-            shutil.copytree(local_path / source.path, cache_path, dirs_exist_ok=True)
+            # Create cache directory and copy contents
+            cache_path.mkdir(parents=True, exist_ok=True)
+            
+            # Copy all .md files from source to cache
+            md_files_copied = 0
+            for md_file in source_path.rglob("*.md"):
+                rel_path = md_file.relative_to(source_path)
+                dest_file = cache_path / rel_path
+                dest_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(md_file, dest_file)
+                md_files_copied += 1
+            
+            if progress_callback:
+                progress_callback(f"Copied {md_files_copied} agent files from {source.name}")
             
             source.last_sync = datetime.now().isoformat()
             self.save_config()
@@ -1226,7 +1252,7 @@ class AgentManagerTree:
                     self.sources_index = 0
             
             # Handle additional sources navigation when in sources view
-            elif self.current_view == View.SOURCES and key in [ord('a'), ord('A'), ord('d'), ord('D'), ord('u'), ord('U')]:
+            elif self.current_view == View.SOURCES and key in [ord('a'), ord('A'), ord('d'), ord('D'), ord('u'), ord('U'), ord('y'), ord('Y')]:
                 self.handle_sources_navigation(key)
             
             # Select all in current folder (not in Sources view or ADD_SOURCE)
@@ -1358,7 +1384,7 @@ class AgentManagerTree:
         """Draw sources view instructions"""
         stdscr.addstr(height - 2, 0, "─" * width, curses.color_pair(6))
         
-        instructions = "[↑/↓] Nav  [SPACE] Toggle  [a] Add  [d] Delete  [u] Update  [ESC] Back  [q] Quit"
+        instructions = "[↑/↓] Nav  [SPACE] Toggle  [a] Add  [d] Delete  [y] Sync one  [u] Sync all  [ESC] Back"
         
         if len(instructions) < width:
             stdscr.addstr(height - 1, 2, instructions[:width-3], curses.color_pair(6))
@@ -1394,16 +1420,21 @@ class AgentManagerTree:
                 else:
                     self.sources_status_messages.append("Cannot delete default source")
         elif key == ord('u') or key == ord('U'):
-            # Update/sync sources
+            # Update/sync ALL sources
             if not self.sync_in_progress:
                 self.sync_sources_async()
+        elif key == ord('y') or key == ord('Y'):
+            # Sync only selected source
+            if not self.sync_in_progress and self.sources_index < sources_count:
+                source = self.sources_manager.config.sources[self.sources_index]
+                self.sync_single_source_async(source.id)
         
         # Keep status messages manageable
         if len(self.sources_status_messages) > 10:
             self.sources_status_messages = self.sources_status_messages[-10:]
     
-    def sync_sources_async(self):
-        """Sync sources in background"""
+    def sync_single_source_async(self, source_id):
+        """Sync a single source in background"""
         if self.sync_in_progress:
             return
         
@@ -1412,7 +1443,46 @@ class AgentManagerTree:
         
         def sync_thread():
             self.sync_in_progress = True
-            self.sources_status_messages.append("Starting sync...")
+            source = next((s for s in self.sources_manager.config.sources if s.id == source_id), None)
+            if source:
+                self.sources_status_messages.append(f"Syncing {source.name}...")
+                success = self.sources_manager.sync_source(source_id, progress_callback)
+                
+                if success:
+                    self.sources_status_messages.append(f"✓ {source.name} synced successfully")
+                    # Rebuild merged collection
+                    try:
+                        new_collection = self.sources_manager.get_merged_agents_collection()
+                        if new_collection.exists():
+                            self.agents_collection = new_collection
+                            self.build_tree()
+                            self.load_installation_state()
+                            self.flatten_tree()
+                            self.sources_status_messages.append("Agents collection refreshed")
+                    except Exception as e:
+                        self.sources_status_messages.append(f"Error refreshing collection: {e}")
+                else:
+                    self.sources_status_messages.append(f"✗ Failed to sync {source.name}")
+            else:
+                self.sources_status_messages.append(f"Source not found: {source_id}")
+            
+            self.sync_in_progress = False
+        
+        # Run sync in background thread to not block UI
+        thread = threading.Thread(target=sync_thread, daemon=True)
+        thread.start()
+    
+    def sync_sources_async(self):
+        """Sync ALL sources in background"""
+        if self.sync_in_progress:
+            return
+        
+        def progress_callback(message):
+            self.sources_status_messages.append(message)
+        
+        def sync_thread():
+            self.sync_in_progress = True
+            self.sources_status_messages.append("Starting sync of all sources...")
             results = self.sources_manager.sync_all_sources(progress_callback)
             
             success_count = sum(1 for success in results.values() if success)
@@ -1520,7 +1590,7 @@ class AgentManagerTree:
             'url': '',
             'name': '',
             'priority': '50',
-            'path': 'agents-collection',
+            'path': '.',  # Changed default to '.' for simpler local paths
             'type': 'git'
         }
         self.add_form_current_field = 0
@@ -1602,12 +1672,73 @@ class AgentManagerTree:
         help_y = start_y + len(field_names) * 2 + 1
         if help_y < height - 4:
             stdscr.addstr(help_y, 2, "Examples:", curses.A_BOLD)
-            stdscr.addstr(help_y + 1, 2, "https://github.com/awesome-agents/collection.git", curses.color_pair(6))
-            stdscr.addstr(help_y + 2, 2, "/local/path/to/agents", curses.color_pair(6))
+            stdscr.addstr(help_y + 1, 2, "Git: https://github.com/awesome-agents/collection.git", curses.color_pair(6))
+            stdscr.addstr(help_y + 2, 2, "Local: /path/to/.claude/agents (type=local, path=.)", curses.color_pair(6))
+            if help_y + 3 < height - 4:
+                stdscr.addstr(help_y + 3, 2, "Note: For local sources, leave 'path' as '.' if URL points directly to agents", curses.color_pair(4))
         
         # Instructions
         instructions = "[↑/↓] Navigate  [Type] Edit  [Ctrl+V] Paste  [ENTER] Submit  [ESC] Cancel"
         stdscr.addstr(height - 2, 2, instructions[:width-4], curses.color_pair(6))
+    
+    def validate_source_data(self, source_data):
+        """Validate source data before adding"""
+        errors = []
+        
+        # Check URL/path
+        url = source_data['url']
+        source_type = source_data['type']
+        
+        if source_type == 'local':
+            # Check if local path exists
+            if not Path(url).exists():
+                errors.append(f"Local path does not exist: {url}")
+        elif source_type == 'git':
+            # Basic git URL validation
+            if not (url.startswith('http://') or url.startswith('https://') or url.startswith('git@')):
+                errors.append("Git URL should start with http://, https://, or git@")
+        
+        # Check name
+        if not source_data['name']:
+            errors.append("Name is required")
+        
+        # Check priority
+        if not (0 <= source_data['priority'] <= 100):
+            errors.append("Priority must be between 0 and 100")
+        
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors
+        }
+    
+    def generate_source_id(self, name):
+        """Generate a unique source ID from name"""
+        import re
+        # Convert name to lowercase and replace spaces/special chars with hyphens
+        source_id = re.sub(r'[^a-z0-9]+', '-', name.lower())
+        source_id = source_id.strip('-')
+        
+        # Ensure uniqueness
+        existing_ids = [s.id for s in self.sources_manager.config.sources]
+        if source_id in existing_ids:
+            counter = 1
+            while f"{source_id}-{counter}" in existing_ids:
+                counter += 1
+            source_id = f"{source_id}-{counter}"
+        
+        return source_id
+    
+    def confirm_immediate_sync(self, source_name):
+        """Ask if user wants to sync the new source immediately"""
+        # For now, return False to skip immediate sync in non-interactive mode
+        # Could be enhanced with a confirmation dialog
+        return False
+    
+    def sync_source_immediate(self, source_id):
+        """Sync a specific source immediately"""
+        # This would trigger the sync process for the source
+        # For now, just add a message
+        self.sources_status_messages.append(f"Syncing source {source_id}...")
     
     def process_add_source_form(self):
         """Process add source form with validation"""
@@ -1626,12 +1757,20 @@ class AgentManagerTree:
         except:
             priority = 50
         
+        # Handle path field - use '.' for local sources pointing directly to agents
+        path_value = self.add_form_fields['path'].strip()
+        if not path_value or path_value == '.':
+            path_value = '.'
+        elif path_value == 'agents-collection' and self.add_form_fields['type'].strip() == 'local':
+            # If using default git path for local, change to '.'
+            path_value = '.'
+        
         source_data = {
             'url': self.add_form_fields['url'].strip(),
             'name': self.add_form_fields['name'].strip(),
             'type': self.add_form_fields['type'].strip() or 'git',
             'priority': priority,
-            'path': self.add_form_fields['path'].strip() or 'agents-collection'
+            'path': path_value
         }
         
         # Validate
